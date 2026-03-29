@@ -14,6 +14,21 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
+/**
+ * Filter out undefined values to avoid Firestore "Unsupported field value: undefined" errors.
+ * This is necessary because some form payloads may contain optional fields that are 
+ * explicitly set to undefined.
+ */
+function sanitizeData(data: any) {
+  return Object.keys(data).reduce((acc, key) => {
+    const val = data[key];
+    if (val !== undefined) {
+      acc[key] = val;
+    }
+    return acc;
+  }, {} as any);
+}
+
 // Generic helpers for Firestore CRUD operations scoped to a user
 
 function userCollection(userId: string, collectionName: string) {
@@ -69,8 +84,9 @@ export async function create<T extends DocumentData>(
   collectionName: string,
   data: Omit<T, "id" | "userId" | "createdAt" | "updatedAt">
 ): Promise<string> {
+  const sanitizedData = sanitizeData(data);
   const docRef = await addDoc(userCollection(userId, collectionName), {
-    ...data,
+    ...sanitizedData,
     userId,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -84,14 +100,7 @@ export async function update<T extends DocumentData>(
   docId: string,
   data: Partial<T>
 ): Promise<void> {
-  // Filter out undefined values to avoid Firestore "Unsupported field value: undefined" errors
-  const sanitizedData = Object.keys(data).reduce((acc, key) => {
-    const val = (data as any)[key];
-    if (val !== undefined) {
-      acc[key] = val;
-    }
-    return acc;
-  }, {} as any);
+  const sanitizedData = sanitizeData(data);
 
   await updateDoc(userDoc(userId, collectionName, docId), {
     ...sanitizedData,
@@ -155,8 +164,9 @@ export async function createFinance<T extends DocumentData>(
   subCollection: string,
   data: Omit<T, "id" | "userId" | "createdAt" | "updatedAt">
 ): Promise<string> {
+  const sanitizedData = sanitizeData(data);
   const docRef = await addDoc(financeCollection(userId, subCollection), {
-    ...data,
+    ...sanitizedData,
     userId,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -170,8 +180,9 @@ export async function updateFinance<T extends DocumentData>(
   docId: string,
   data: Partial<T>
 ): Promise<void> {
+  const sanitizedData = sanitizeData(data);
   await updateDoc(financeDoc(userId, subCollection, docId), {
-    ...data,
+    ...sanitizedData,
     updatedAt: Timestamp.now(),
   });
 }
