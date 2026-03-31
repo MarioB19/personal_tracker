@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, update, remove, getFiltered } from "@/lib/repositories/firestore";
 import { TimeBlock, DayOfWeek, BlockCategory, BlockStatus } from "@/lib/types";
-import { Calendar, Plus, X, Save, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Plus, X, Save, Check, ChevronLeft, ChevronRight, LayoutTemplate, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 
@@ -56,6 +56,9 @@ export default function AgendaPage() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [category, setCategory] = useState<BlockCategory>("TRABAJO");
+
+  const [view, setView] = useState<"week" | "month">("week");
+  const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
 
   const [now, setNow] = useState(new Date());
 
@@ -180,6 +183,50 @@ export default function AgendaPage() {
     loadData();
   };
 
+  // Month View Logic
+  const monthDate = new Date();
+  monthDate.setMonth(monthDate.getMonth() + currentMonthOffset);
+  monthDate.setDate(1);
+
+  const startDayOfWeek = (monthDate.getDay() + 6) % 7; // Monday = 0
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+
+  const gridDays: Date[] = [];
+  // Pad previous month
+  for(let i = 0; i < startDayOfWeek; i++) {
+     const d = new Date(monthDate);
+     d.setDate(d.getDate() - (startDayOfWeek - i));
+     gridDays.push(d);
+  }
+  // Current month
+  for(let i = 1; i <= daysInMonth; i++) {
+     const d = new Date(monthDate);
+     d.setDate(i);
+     gridDays.push(d);
+  }
+  // Pad next month
+  while(gridDays.length % 7 !== 0) {
+     const d = new Date(gridDays[gridDays.length - 1]);
+     d.setDate(d.getDate() + 1);
+     gridDays.push(d);
+  }
+
+  const isToday = (d: Date) => {
+      const today = new Date();
+      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  }
+
+  const getDayKey = (d: Date): DayOfWeek => {
+      const g = d.getDay();
+      if(g===1) return "MON";
+      if(g===2) return "TUE";
+      if(g===3) return "WED";
+      if(g===4) return "THU";
+      if(g===5) return "FRI";
+      if(g===6) return "SAT";
+      return "SUN";
+  }
+
   // Compliance rate for the week
   const totalBlocks = weekBlocks.length;
   const completedBlocks = weekBlocks.filter(isBlockCompleted).length;
@@ -199,72 +246,146 @@ export default function AgendaPage() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Calendar className="w-5 h-5 text-amber-400" /> Agenda
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">{weekId} · Cumplimiento: {complianceRate}%</p>
+          <p className="text-sm text-zinc-500 mt-0.5">
+              {view === "week" ? `${weekId} · Cumplimiento: ${complianceRate}%` : `${monthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          {weekBlocks.length === 0 && (
-            <button
-              onClick={handleLoadRoutine}
-              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg mr-2"
-            >
-              Cargar Rutina
-            </button>
-          )}
-          <button onClick={() => setCurrentWeekOffset(o => o - 1)} className="btn-secondary p-2"><ChevronLeft className="w-4 h-4" /></button>
-          <button onClick={() => setCurrentWeekOffset(0)} className="btn-secondary px-4 py-2">Hoy</button>
-          <button onClick={() => setCurrentWeekOffset(o => o + 1)} className="btn-secondary p-2"><ChevronRight className="w-4 h-4" /></button>
-        </div>
-      </div>
-
-      {/* Week compliance bar */}
-      {totalBlocks > 0 && (
-        <div className="glass-card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-zinc-400">Cumplimiento semanal</span>
-            <span className="text-xs text-amber-400 font-bold">{complianceRate}%</span>
+        <div className="flex items-center gap-4">
+          
+          <div className="flex bg-[#0c0c0e] border border-white/10 rounded-xl p-1">
+             <button 
+                 onClick={() => setView("week")}
+                 className={cn("px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all", view === "week" ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300")}
+             >
+                 <LayoutTemplate className="w-3.5 h-3.5"/> Semanal
+             </button>
+             <button 
+                 onClick={() => setView("month")}
+                 className={cn("px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all", view === "month" ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300")}
+             >
+                 <CalendarDays className="w-3.5 h-3.5"/> Mensual
+             </button>
           </div>
-          <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${complianceRate}%` }} /></div>
-        </div>
-      )}
 
-      {/* Weekly grid — scrollable horizontally on small screens */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
-        <div className="grid grid-cols-7 gap-2 min-w-[700px]">
-        {DAYS.map(day => {
-          const dayBlocks = weekBlocks.filter(b => b.day === day.key).sort((a, b) => a.startTime.localeCompare(b.startTime));
-          return (
-            <div key={day.key} className="glass-card p-3 min-h-[200px]">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-zinc-300">{day.short}</h3>
-                <button onClick={() => { setSelectedDay(day.key); setShowForm(true); }} className="text-zinc-600 hover:text-amber-400 transition-colors">
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                {dayBlocks.map(block => (
-                  <div
-                    key={block.id}
-                    className={cn(
-                      "rounded-md px-2 py-1.5 border-l-2 text-[10px] group relative",
-                      CATEGORY_COLORS[block.category],
-                      isBlockCompleted(block) && "opacity-60"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-400">{block.startTime}-{block.endTime}</span>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => deleteBlock(block.id)} className="text-zinc-600 hover:text-red-400"><X className="w-3 h-3" /></button>
-                      </div>
-                    </div>
-                    <p className={cn("font-medium text-zinc-200 mt-0.5", isBlockCompleted(block) && "line-through")}>{block.title}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+          <div className="flex items-center gap-2">
+            {view === "week" && weekBlocks.length === 0 && (
+              <button
+                onClick={handleLoadRoutine}
+                className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg"
+              >
+                Cargar Rutina
+              </button>
+            )}
+            <button onClick={() => view === "week" ? setCurrentWeekOffset(o => o - 1) : setCurrentMonthOffset(o => o - 1)} className="btn-secondary p-2"><ChevronLeft className="w-4 h-4" /></button>
+            <button onClick={() => view === "week" ? setCurrentWeekOffset(0) : setCurrentMonthOffset(0)} className="btn-secondary px-4 py-2">Hoy</button>
+            <button onClick={() => view === "week" ? setCurrentWeekOffset(o => o + 1) : setCurrentMonthOffset(o => o + 1)} className="btn-secondary p-2"><ChevronRight className="w-4 h-4" /></button>
+          </div>
         </div>
       </div>
+
+      {view === "week" ? (
+          <>
+          {/* Week compliance bar */}
+          {totalBlocks > 0 && (
+            <div className="glass-card p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-zinc-400">Cumplimiento semanal</span>
+                <span className="text-xs text-amber-400 font-bold">{complianceRate}%</span>
+              </div>
+              <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${complianceRate}%` }} /></div>
+            </div>
+          )}
+
+          {/* Weekly grid — scrollable horizontally on small screens */}
+          <div className="overflow-x-auto -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 mt-4">
+            <div className="grid grid-cols-7 gap-3 min-w-[900px]">
+            {DAYS.map(day => {
+              const dayBlocks = weekBlocks.filter(b => b.day === day.key).sort((a, b) => a.startTime.localeCompare(b.startTime));
+              const dKeyDate = new Date(); // To check if 'day' is today would require matching the current week id offset
+              // For simplicity, we just mark the current visual day if it's the current week
+              const isCurrentDay = currentWeekOffset === 0 && ((new Date()).getDay()===0?"SUN":getDayKey(new Date())) === day.key;
+              
+              return (
+                <div key={day.key} className={cn("glass-card p-3 min-h-[300px]", isCurrentDay && "border-amber-500/30 bg-amber-500/[0.02]")}>
+                  <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-2">
+                    <h3 className={cn("text-xs font-black uppercase tracking-widest", isCurrentDay ? "text-amber-400" : "text-zinc-400")}>{day.label}</h3>
+                    <button onClick={() => { setSelectedDay(day.key); setShowForm(true); }} className="text-zinc-500 hover:text-amber-400 transition-colors p-1 bg-white/5 rounded-md hover:bg-white/10">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {dayBlocks.map(block => (
+                      <div
+                        key={block.id}
+                        className={cn(
+                          "rounded-lg px-2.5 py-2 border-l-2 text-[10px] group relative hover:translate-x-0.5 transition-transform",
+                          CATEGORY_COLORS[block.category],
+                          isBlockCompleted(block) && "opacity-50 grayscale"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-zinc-500 font-medium tracking-wide">{block.startTime}-{block.endTime}</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => deleteBlock(block.id)} className="text-zinc-500 hover:text-red-400 bg-black/20 p-0.5 rounded"><X className="w-3 h-3" /></button>
+                          </div>
+                        </div>
+                        <p className={cn("font-bold text-zinc-100 text-xs", isBlockCompleted(block) && "line-through text-zinc-400")}>{block.title}</p>
+                      </div>
+                    ))}
+                    {dayBlocks.length === 0 && (
+                        <div className="text-center py-4 border border-dashed border-white/5 rounded-xl">
+                            <span className="text-[10px] text-zinc-600 block">Sin eventos</span>
+                        </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            </div>
+          </div>
+          </>
+      ) : (
+          <div className="glass-card mt-4 overflow-hidden">
+             {/* Monthly Header */}
+             <div className="grid grid-cols-7 border-b border-white/10 bg-black/40">
+                 {DAYS.map(d => (
+                     <div key={d.key} className="py-3 text-center text-xs font-bold text-zinc-500 uppercase tracking-widest">{d.short}</div>
+                 ))}
+             </div>
+             {/* Monthly Grid */}
+             <div className="grid grid-cols-7 auto-rows-[120px]">
+                 {gridDays.map((d, i) => {
+                     const dateId = d.toISOString().split("T")[0];
+                     const isCurrMonth = d.getMonth() === monthDate.getMonth();
+                     const dayW = getISOWeek(d);
+                     const dayK = getDayKey(d);
+                     const blocksForDay = blocks.filter(b => b.weekId === dayW && b.day === dayK).sort((a,b) => a.startTime.localeCompare(b.startTime));
+                     
+                     return (
+                         <div key={dateId} className={cn("border-r border-b border-white/5 p-2 flex flex-col gap-1 overflow-hidden group hover:bg-white/[0.02] transition-colors", !isCurrMonth && "opacity-40 bg-black/20", isToday(d) && "bg-amber-500/5")}>
+                             <div className="flex items-center justify-between mb-1">
+                                 <span className={cn("text-xs font-black", isToday(d) ? "text-amber-400" : "text-zinc-500")}>{d.getDate()}</span>
+                                 <button onClick={() => {
+                                     // Quick add for this date. We'd ideally switch to week view, offset to that week, and set selectedDay.
+                                     // But for simplicity, we simulate standard creation.
+                                     setCategory("TRABAJO");
+                                 }} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-white"><Plus className="w-3 h-3"/></button>
+                             </div>
+                             
+                             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                                 {blocksForDay.map(b => (
+                                     <div key={b.id} className={cn("text-[9px] px-1.5 py-0.5 rounded truncate border-l border-white/10", CATEGORY_COLORS[b.category])}>
+                                         <span className="font-semibold text-white/90 mr-1">{b.startTime}</span>
+                                         <span className="text-white/70">{b.title}</span>
+                                     </div>
+                                 ))}
+                             </div>
+                         </div>
+                     )
+                 })}
+             </div>
+          </div>
+      )}
 
       {/* Add block modal */}
       {showForm && (

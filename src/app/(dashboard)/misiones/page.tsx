@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, update, remove } from "@/lib/repositories/firestore";
 import { Mission, Goal, MissionStatus, ChecklistItem } from "@/lib/types";
-import { Swords, Plus, Edit2, Trash2, X, Save, MoreVertical, CheckSquare, Square, Activity, Calendar, TargetIcon, ListChecks, CheckCircle2 } from "lucide-react";
+import { Swords, Plus, Edit2, Trash2, X, Save, MoreVertical, CheckSquare, Square, Activity, Calendar, TargetIcon, ListChecks, CheckCircle2, Play, Check, ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { cn, formatPercent, getStatusColor } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 
@@ -22,6 +22,13 @@ export default function MisionesPage() {
   const [editing, setEditing] = useState<Mission | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterDiff, setFilterDiff] = useState<string>("ALL");
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    PENDING: false,
+    IN_PROGRESS: false,
+    COMPLETED: false,
+    FAILED: false,
+  });
 
   // Form
   const [name, setName] = useState("");
@@ -73,8 +80,24 @@ export default function MisionesPage() {
     const updated = (mission.checklist || []).map(c => c.id === itemId ? { ...c, completed: !c.completed } : c);
     const completedCount = updated.filter(c => c.completed).length;
     const progress = updated.length > 0 ? Math.round((completedCount / updated.length) * 100) : 0;
-    await update(uid, "missions", missionId, { checklist: updated, progress });
+    
+    // Auto-complete status if 100%
+    const status = progress >= 100 ? "COMPLETED" : (mission.status === "PENDING" && progress > 0 ? "IN_PROGRESS" : mission.status);
+
+    await update(uid, "missions", missionId, { checklist: updated, progress, status });
     loadData();
+  };
+
+  const quickUpdateStatus = async (id: string, s: MissionStatus) => {
+    if (!uid) return;
+    const upd: any = { status: s };
+    if (s === "COMPLETED") upd.progress = 100;
+    await update(uid, "missions", id, upd);
+    loadData();
+  };
+
+  const toggleGroup = (status: string) => {
+    setOpenGroups(prev => ({ ...prev, [status]: !prev[status] }));
   };
 
   const handleSave = async () => {
@@ -113,6 +136,23 @@ export default function MisionesPage() {
           <p className="text-sm text-zinc-500 mt-0.5">Retos y misiones especiales</p>
         </div>
         <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {['ALL', ...DIFFICULTIES].map(d => (
+             <button
+                key={d}
+                onClick={() => setFilterDiff(d === 'ALL' ? 'ALL' : String(d))}
+                className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all border",
+                    filterDiff === (d === 'ALL' ? 'ALL' : String(d)) 
+                       ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                       : "bg-transparent border-white/5 text-zinc-600 hover:bg-white/5 hover:text-zinc-300"
+                )}
+                title={d === 'ALL' ? "Todos los niveles" : `Dificultad ${d}`}
+             >
+                {d === 'ALL' ? <Filter className="w-3.5 h-3.5" /> : d}
+             </button>
+          ))}
+        </div>
           <button onClick={() => { setShowForm(true); setEditing(null); resetForm(); }} className="btn-primary flex items-center gap-1.5">
             <Plus className="w-4 h-4" /> Nueva misión
           </button>
@@ -244,43 +284,119 @@ export default function MisionesPage() {
       )}
 
       {missions.length > 0 ? (
-        <div className="space-y-3">
-          {missions.map(m => {
-            const isExpanded = expandedId === m.id;
+        <div className="space-y-6">
+          {STATUSES.map(catStatus => {
+            const catMissions = missions
+              .filter(m => m.status === catStatus && (filterDiff === "ALL" || m.difficulty === Number(filterDiff)))
+              .sort((a,b) => (a.targetDate?.toMillis() || 0) - (b.targetDate?.toMillis() || 0));
+              
+            if (catMissions.length === 0) return null;
+            const isOpen = openGroups[catStatus];
+
             return (
-              <div key={m.id} className="glass-card p-4 group">
-                <div className="flex items-start gap-4 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : m.id)}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-medium text-zinc-100 truncate">{m.name}</h3>
-                      <span className={`text-xs px-2.5 py-0.5 rounded-full border shrink-0 ${getStatusColor(m.status)}`}>{m.status.replace("_", " ")}</span>
-                      <span className="text-[10px] text-zinc-600">⚡{m.difficulty}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 progress-bar"><div className="progress-bar-fill" style={{ width: `${m.progress}%` }} /></div>
-                      <span className="text-[10px] text-zinc-500">{formatPercent(m.progress)}</span>
-                    </div>
+              <div key={catStatus} className={cn("transition-all duration-300", isOpen ? "space-y-3" : "mb-3")}>
+                <button 
+                  onClick={() => toggleGroup(catStatus)}
+                  className={cn(
+                      "flex items-center justify-between w-full text-left transition-colors rounded-xl",
+                      isOpen 
+                        ? "" 
+                        : "bg-zinc-900/40 border border-white/5 px-4 py-3 hover:bg-zinc-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                      {isOpen ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronRight className="w-4 h-4 text-zinc-400" />}
+                      <h2 className={cn("text-sm font-bold flex items-center gap-2", isOpen ? "text-zinc-300" : "text-zinc-200")}>
+                        {catStatus.replace("_", " ")}
+                        <span className="bg-white/10 px-2 py-0.5 rounded-full text-[10px] text-zinc-400 font-medium">
+                          {catMissions.length} {catMissions.length === 1 ? "misión" : "misiones"}
+                        </span>
+                      </h2>
                   </div>
-                  <div className="relative shrink-0">
-                    <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === m.id ? null : m.id); }} className="text-zinc-600 hover:text-zinc-400 opacity-0 group-hover:opacity-100 p-1">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {menuOpen === m.id && (
-                      <div className="absolute right-0 top-8 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-10 py-1 min-w-[120px]">
-                        <button onClick={(e) => { e.stopPropagation(); openEdit(m); }} className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 w-full"><Edit2 className="w-3.5 h-3.5" /> Editar</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 w-full"><Trash2 className="w-3.5 h-3.5" /> Eliminar</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {isExpanded && m.checklist && m.checklist.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-zinc-800/50 space-y-1.5">
-                    {m.checklist.map(item => (
-                      <button key={item.id} onClick={() => toggleCheckItem(m.id, item.id)} className="flex items-center gap-2 text-xs w-full text-left">
-                        {item.completed ? <CheckSquare className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <Square className="w-3.5 h-3.5 text-zinc-600 shrink-0" />}
-                        <span className={cn("text-zinc-300", item.completed && "line-through text-zinc-600")}>{item.text}</span>
-                      </button>
-                    ))}
+                  {!isOpen && (
+                    <div className="flex items-center gap-2">
+                        {catStatus === "COMPLETED" && <CheckCircle2 className="w-4 h-4 text-emerald-500/50" />}
+                        {catStatus === "IN_PROGRESS" && <Play className="w-4 h-4 text-amber-500/50" />}
+                        {catStatus === "PENDING" && <Square className="w-4 h-4 text-zinc-600" />}
+                    </div>
+                  )}
+                </button>
+                
+                {isOpen && (
+                  <div className="space-y-3 pl-6 border-l border-white/5 ml-2 mt-2">
+                    {catMissions.map(m => {
+                      const isExpanded = expandedId === m.id;
+                      const isOverdue = m.targetDate && m.targetDate.toDate() < new Date() && m.status !== "COMPLETED";
+
+                      return (
+                        <div key={m.id} className="glass-card p-4 group">
+                          <div className="flex items-start gap-4">
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : m.id)}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="text-sm font-medium text-zinc-100 truncate">{m.name}</h3>
+                                <div className="flex items-center gap-2 text-[10px] text-zinc-500 shrink-0">
+                                  <span className="flex items-center gap-1"><Swords className="w-3 h-3"/> D{m.difficulty}</span>
+                                  {m.targetDate && (
+                                     <span className={cn("flex items-center gap-1", isOverdue && "text-red-400 font-bold")}>
+                                       <Calendar className="w-3 h-3"/> {m.targetDate.toDate().toLocaleDateString("es-MX", {day:"2-digit", month:"short"})}
+                                     </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 mt-2">
+                                <div className="flex-1 progress-bar cursor-pointer group/progress relative overflow-hidden" onClick={(e) => {
+                                      e.stopPropagation();
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      let p = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                                      if (p < 0) p = 0; if (p > 100) p = 100;
+                                      let st = m.status;
+                                      if(p === 100) st = "COMPLETED";
+                                      else if(p > 0 && st === "PENDING") st = "IN_PROGRESS";
+                                      update(uid!, "missions", m.id, { progress: p, status: st }).then(loadData);
+                                  }}>
+                                  <div className="progress-bar-fill shadow-[0_0_10px_rgba(255,255,255,0.2)] group-hover/progress:brightness-125 transition-all" style={{ width: `${m.progress}%` }} />
+                                </div>
+                                <span className="text-[10px] text-zinc-400 min-w-[32px] text-right font-mono font-medium">{formatPercent(m.progress)}</span>
+                              </div>
+                            </div>
+
+                            {/* Acciones Rápidas y Menú */}
+                            <div className="flex items-center gap-1 shrink-0 relative">
+                              {m.status === "PENDING" && (
+                                <button onClick={(e) => { e.stopPropagation(); quickUpdateStatus(m.id, "IN_PROGRESS"); }} className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors" title="Iniciar">
+                                  <Play className="w-4 h-4" />
+                                </button>
+                              )}
+                              {m.status === "IN_PROGRESS" && (
+                                <button onClick={(e) => { e.stopPropagation(); quickUpdateStatus(m.id, "COMPLETED"); }} className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 transition-colors" title="Completar">
+                                  <Check className="w-4 h-4" />
+                                </button>
+                              )}
+                              
+                              <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === m.id ? null : m.id); }} className="text-zinc-600 hover:text-zinc-400 p-1">
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                              {menuOpen === m.id && (
+                                <div className="absolute right-0 top-8 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-10 py-1 min-w-[120px]">
+                                  <button onClick={(e) => { e.stopPropagation(); openEdit(m); }} className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 w-full"><Edit2 className="w-3.5 h-3.5" /> Editar</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }} className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 w-full"><Trash2 className="w-3.5 h-3.5" /> Eliminar</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {isExpanded && m.checklist && m.checklist.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-zinc-800/50 space-y-1.5">
+                              {m.checklist.map(item => (
+                                <button key={item.id} onClick={() => toggleCheckItem(m.id, item.id)} className="flex items-center gap-2 text-xs w-full text-left">
+                                  {item.completed ? <CheckSquare className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <Square className="w-3.5 h-3.5 text-zinc-600 shrink-0" />}
+                                  <span className={cn("text-zinc-300", item.completed && "line-through text-zinc-600")}>{item.text}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

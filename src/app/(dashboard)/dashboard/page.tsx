@@ -20,7 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { formatPercent, getStatusColor } from "@/lib/utils";
+import { formatPercent, getStatusColor, cn } from "@/lib/utils";
 
 interface StatCardProps {
   icon: React.ElementType;
@@ -214,84 +214,118 @@ export default function DashboardPage() {
       {/* Secondary Bento Grids */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Alerts */}
-        <div className="glass-card-static p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
-              <h2 className="text-[13px] font-semibold">Alertas</h2>
-            </div>
-            {alerts.length > 0 && (
-              <span className="text-[10px] font-bold bg-red-500/15 text-red-400 px-2.5 py-0.5 rounded-full">
-                {alerts.length}
-              </span>
-            )}
+        <div className="glass-card-static flex flex-col h-[400px]">
+          <div className="p-5 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-[13px] font-semibold">Alertas</h2>
+                </div>
+                {alerts.length > 0 && (
+                  <span className="text-[10px] font-bold bg-zinc-800 text-zinc-300 px-2.5 py-0.5 rounded-full border border-white/5">
+                    {alerts.length} totales
+                  </span>
+                )}
+              </div>
           </div>
-          {alerts.length > 0 ? (
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {alerts.map((alert) => (
-                <AlertCard key={alert.id} alert={alert} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-10">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500/20 mx-auto mb-2" />
-              <p className="text-[11px] text-zinc-500">Todo en orden</p>
-              <p className="text-[10px] text-zinc-700">No hay alertas activas</p>
-            </div>
-          )}
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5 space-y-4">
+              {alerts.length > 0 ? (
+                  <>
+                      {alerts.filter(a => a.type === "danger").length > 0 && (
+                          <div className="space-y-2">
+                              <h3 className="text-[10px] uppercase font-bold text-red-500 tracking-wider">Prioridad Alta</h3>
+                              {alerts.filter(a => a.type === "danger").map((alert) => (
+                                  <AlertCard key={alert.id} alert={alert} />
+                              ))}
+                          </div>
+                      )}
+                      
+                      {alerts.filter(a => a.type === "warning").length > 0 && (
+                          <div className="space-y-2">
+                              <h3 className="text-[10px] uppercase font-bold text-amber-500 tracking-wider mt-2">Atención</h3>
+                              {alerts.filter(a => a.type === "warning").map((alert) => (
+                                  <AlertCard key={alert.id} alert={alert} />
+                              ))}
+                          </div>
+                      )}
+
+                      {alerts.filter(a => a.type === "info").length > 0 && (
+                          <div className="space-y-2">
+                              <h3 className="text-[10px] uppercase font-bold text-blue-500 tracking-wider mt-2">Información</h3>
+                              {alerts.filter(a => a.type === "info").map((alert) => (
+                                  <AlertCard key={alert.id} alert={alert} />
+                              ))}
+                          </div>
+                      )}
+                  </>
+              ) : (
+                <div className="text-center py-10 h-full flex flex-col items-center justify-center">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500/20 mb-3" />
+                  <p className="text-[12px] font-medium text-zinc-300">Todo en orden</p>
+                  <p className="text-[10px] text-zinc-600 mt-1">No hay alertas activas que requieran tu atención.</p>
+                </div>
+              )}
+          </div>
         </div>
 
         {/* Recent goals */}
-        <div className="glass-card-static p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <h2 className="text-[13px] font-semibold">Metas recientes</h2>
-            </div>
-            <Link
-              href="/estrategia/metas"
-              className="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1 font-medium"
-            >
-              Ver todas <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-          {activeGoals.length > 0 ? (
-            <div className="space-y-3">
-              {activeGoals.slice(0, 5).map((goal) => (
-                <div key={goal.id} className="group">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[12px] font-medium text-zinc-300 truncate pr-3 group-hover:text-zinc-100 transition-colors">
-                      {goal.name}
-                    </p>
-                    <span className={`badge shrink-0 ${getStatusColor(goal.status)}`}>
-                      {goal.status.replace("_", " ")}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 progress-bar">
-                      <div
-                        className="progress-bar-fill"
-                        style={{ width: `${goal.progress}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-zinc-500 min-w-[32px] text-right font-mono">
-                      {formatPercent(goal.progress)}
-                    </span>
-                  </div>
+        <div className="glass-card-static flex flex-col h-[400px]">
+          <div className="p-5 pb-4 border-b border-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-[13px] font-semibold">Metas recientes</h2>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-icon">
-                <Plus className="w-5 h-5 text-zinc-600" />
+                <Link
+                  href="/estrategia/metas"
+                  className="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1 font-medium bg-white/5 px-2 py-1 rounded hover:bg-white/10"
+                >
+                  Ver todas <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
-              <p className="text-xs text-zinc-500 mb-3">Aún no tienes metas</p>
-              <Link href="/estrategia/metas" className="btn-primary flex items-center gap-1.5">
-                Crear meta <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          )}
+          </div>
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-5 pt-4">
+              {activeGoals.length > 0 ? (
+                <div className="space-y-4">
+                  {activeGoals.slice(0, 6).map((goal) => (
+                    <div key={goal.id} className="group hover:bg-white/[0.02] p-2 -mx-2 rounded-lg transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[12px] font-bold text-zinc-200 truncate pr-3 group-hover:text-amber-400 transition-colors">
+                          {goal.name}
+                        </p>
+                        <span className={`badge shrink-0 ${getStatusColor(goal.status)}`}>
+                          {goal.status.replace("_", " ")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 progress-bar h-1.5">
+                          <div
+                            className="progress-bar-fill"
+                            style={{ width: `${goal.progress}%`, ...(goal.progress === 100 ? { background: '#10b981' } : {}) }}
+                          />
+                        </div>
+                        <span className={cn("text-[10px] font-mono font-bold min-w-[32px] text-right", goal.progress === 100 ? "text-emerald-400" : "text-zinc-400")}>
+                          {formatPercent(goal.progress)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state h-full flex flex-col items-center justify-center">
+                  <div className="empty-state-icon">
+                    <Plus className="w-5 h-5 text-zinc-600" />
+                  </div>
+                  <p className="text-[12px] font-medium text-zinc-300 mb-1">Aún no tienes metas</p>
+                  <p className="text-[10px] text-zinc-500 mb-4 text-center max-w-[200px]">Define tus prioridades y empieza a trackear tu progreso.</p>
+                  <Link href="/estrategia/metas" className="btn-primary flex items-center gap-1.5">
+                    Crear meta <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              )}
+          </div>
         </div>
       </div>
 

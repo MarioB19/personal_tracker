@@ -267,24 +267,41 @@ export function GoalSlideOver({
              </div>
              
              <div className="grid grid-cols-2 gap-3">
-               <div>
-                 <label className="text-[10px] font-semibold tracking-wider text-zinc-500 mb-1.5 block flex items-center gap-1.5">
-                   <CalendarDays className="w-3 h-3" /> FECHA OBJETIVO
-                 </label>
-                 <input
-                   type="date"
-                   value={targetDate}
-                   onChange={(e) => setTargetDate(e.target.value)}
-                   className="w-full bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 block"
-                   style={{ colorScheme: "dark" }}
-                 />
-               </div>
+                 <div className="space-y-1.5 flex-1">
+                     <label className="text-[10px] font-semibold tracking-wider text-zinc-500 block flex items-center gap-1.5">
+                       <CalendarDays className="w-3 h-3" /> FECHA OBJETIVO
+                     </label>
+                     <input
+                       type="date"
+                       value={targetDate}
+                       onChange={(e) => setTargetDate(e.target.value)}
+                       className="w-full bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 block"
+                       style={{ colorScheme: "dark" }}
+                     />
+                     <div className="flex gap-1.5 mt-1">
+                        <button onClick={() => {
+                            const d = new Date();
+                            const qEndMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+                            d.setMonth(qEndMonth + 1, 0);
+                            setTargetDate(d.toISOString().split("T")[0]);
+                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[9px] transition-colors border border-white/5">Fin Q actual</button>
+                        <button onClick={() => {
+                            const d = new Date();
+                            d.setFullYear(d.getFullYear(), 11, 31);
+                            setTargetDate(d.toISOString().split("T")[0]);
+                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[9px] transition-colors border border-white/5">Fin Año</button>
+                     </div>
+                 </div>
                
                <div>
                  <label className="text-[10px] font-semibold tracking-wider text-zinc-500 mb-1.5 block">ESTADO</label>
                  <select
                    value={status}
-                   onChange={(e) => setStatus(e.target.value as GoalStatus)}
+                   onChange={(e) => {
+                      const val = e.target.value as GoalStatus;
+                      setStatus(val);
+                      if (val === "COMPLETED") setProgress(100);
+                   }}
                    className="w-full bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-emerald-500/50 appearance-none font-medium"
                  >
                    {STATUSES.map((s) => (
@@ -305,7 +322,12 @@ export function GoalSlideOver({
                  min={0}
                  max={100}
                  value={progress}
-                 onChange={(e) => setProgress(parseInt(e.target.value))}
+                 onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setProgress(val);
+                    if (val === 100) setStatus("COMPLETED");
+                    else if (val > 0 && status === "ACTIVE") setStatus("IN_PROGRESS");
+                 }}
                  className="w-full accent-amber-500 hover:accent-amber-400 ease-in-out transition-all"
                />
              </div>

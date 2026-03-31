@@ -226,220 +226,191 @@ export default function PlanificadorPage() {
             </div>
         </div>
 
-        {/* Excel-like Table Header */}
+        {/* Planner Header Info */}
+        <div className="flex bg-black/40 border border-white/5 p-4 rounded-xl mb-6 items-center flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+                <label className="text-xs text-zinc-500 block mb-1 uppercase tracking-wider font-semibold">Saldo Inicial (Base)</label>
+                <div className="flex items-center gap-2">
+                    <span className="text-amber-500 font-bold">$</span>
+                    <input 
+                        type="number"
+                        value={initialSavings === 0 ? "" : initialSavings}
+                        onChange={(e) => setInitialSavings(Number(e.target.value) || 0)}
+                        className="bg-transparent text-lg text-amber-400 font-black outline-none w-32 border-b border-transparent focus:border-amber-500/50 transition-colors hide-arrows"
+                        placeholder="0.00"
+                    />
+                </div>
+            </div>
+            
+            <div className="flex-1 min-w-[200px]">
+                <label className="text-xs text-zinc-500 block mb-1 uppercase tracking-wider font-semibold">Total Proyectado Año</label>
+                <div className="text-xl font-black text-emerald-400">
+                    {formatCurrency(calcAccumulated(11))}
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <button onClick={addIncomeSource} className="btn-secondary flex items-center gap-2 py-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" /> Añadir Flujo de Ingreso
+                </button>
+            </div>
+        </div>
+
+        {/* Data Grid */}
         <div className="border border-white/5 bg-[#0a0a0c] rounded-2xl overflow-hidden shadow-2xl">
-            {/* Scrollable Container */}
             <div className="overflow-x-auto custom-scrollbar">
-                <div className="min-w-[1400px] text-sm">
-                    
-                    {/* Headers */}
-                    <div className="grid grid-cols-[200px_repeat(12,1fr)] border-b border-white/10 bg-white/[0.02]">
-                        <div className="p-3 font-semibold text-zinc-400 border-r border-white/5 flex flex-col justify-center">
-                            <span className="text-xs">Ahorro Actual (Inicial)</span>
-                            <input 
-                                type="number"
-                                value={initialSavings === 0 ? "" : initialSavings}
-                                onChange={(e) => setInitialSavings(Number(e.target.value) || 0)}
-                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-500 hide-arrows"
-                                placeholder="0"
-                            />
-                        </div>
-                        {MONTHS.map((m, idx) => (
-                            <div key={m} className={cn("px-1 py-3 font-bold text-center border-r border-white/5 border-dashed flex items-center justify-center", idx === 11 && "border-r-0")}>
-                                <div className="text-zinc-300">{m}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* INCOMES SECTION */}
-                    <div className="border-b border-white/10 bg-black/20">
-                        <div className="px-3 py-2 flex items-center justify-between text-xs font-bold text-emerald-500 uppercase tracking-widest bg-emerald-500/5">
-                            <span className="flex items-center gap-2"><TrendingUp className="w-3 h-3" /> Fuentes de Ingreso</span>
-                            <button onClick={addIncomeSource} className="hover:text-emerald-300 flex items-center gap-1.5"><Plus className="w-3 h-3" /> Fila</button>
-                        </div>
-                        
-                        {incomes.map((inc) => (
-                            <div key={inc.id} className="grid grid-cols-[200px_repeat(12,1fr)] border-b border-white/5 last:border-0 group hover:bg-white/[0.01] transition-colors">
-                                <div className="p-3 border-r border-white/5 flex items-center gap-2">
-                                    <button onClick={() => removeIncomeSource(inc.id)} className="text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                    <input 
-                                        value={inc.name} 
-                                        onChange={(e) => {
-                                            const n = e.target.value;
-                                            setIncomes(incomes.map(i => i.id === inc.id ? { ...i, name: n } : i));
-                                        }}
-                                        className="w-full bg-transparent outline-none text-zinc-300 font-medium placeholder:text-zinc-600"
-                                        placeholder="Nombre..."
-                                    />
-                                </div>
-                                {MONTHS.map((_, idx) => (
-                                    <div key={idx} className={cn("p-2 border-r border-white/5 border-dashed", idx === 11 && "border-r-0")}>
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead>
+                        <tr className="bg-white/[0.02] border-b border-white/10 uppercase text-[10px] font-bold tracking-widest text-zinc-500">
+                            <th className="p-4 sticky left-0 z-20 bg-[#0a0a0c] border-r border-white/5">Mes</th>
+                            {incomes.map(inc => (
+                                <th key={inc.id} className="p-4 border-r border-white/5 min-w-[150px] group relative">
+                                    <div className="flex items-center justify-between gap-2">
                                         <input 
-                                            type="number"
-                                            value={inc.values[idx] === 0 ? "" : inc.values[idx]}
-                                            onChange={(e) => updateIncomeValue(inc.id, idx, e.target.value)}
-                                            className="w-full h-full bg-transparent outline-none text-center text-zinc-400 hover:bg-white/5 focus:bg-white/10 focus:text-white rounded transition-colors hide-arrows text-[13px]"
-                                            placeholder="-"
+                                            value={inc.name} 
+                                            onChange={(e) => {
+                                                const n = e.target.value;
+                                                setIncomes(incomes.map(i => i.id === inc.id ? { ...i, name: n } : i));
+                                            }}
+                                            className="bg-transparent outline-none text-emerald-400 font-bold placeholder:text-zinc-600 w-full"
+                                            placeholder="Ingreso..."
                                         />
+                                        <button onClick={() => removeIncomeSource(inc.id)} className="text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
                                     </div>
-                                ))}
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* TOTAL INCOME (Calculated) */}
-                    <div className="grid grid-cols-[200px_repeat(12,1fr)] border-b border-emerald-500/20 bg-emerald-500/[0.02]">
-                        <div className="p-3 font-bold text-emerald-400 border-r border-white/5 text-right flex items-center justify-end pr-5 text-[13px]">
-                            Total Ingresos
-                        </div>
-                        {MONTHS.map((_, idx) => (
-                            <div key={idx} className={cn("px-1 py-3 border-r border-white/5 border-dashed flex items-center justify-center font-bold text-[13px] text-emerald-300", idx === 11 && "border-r-0")}>
-                                {formatCurrency(calcTotalIncome(idx))}
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* EXPENSES SECTION */}
-                    <div className="border-b border-white/10 bg-black/20">
-                        <div className="px-3 py-2 flex items-center justify-between text-xs font-bold text-red-500 uppercase tracking-widest bg-red-500/5">
-                            <span className="flex items-center gap-2"><TrendingDown className="w-3 h-3" /> Gastos y Egresos</span>
-                        </div>
-                        <div className="grid grid-cols-[200px_repeat(12,1fr)] border-b border-white/5">
-                            <div className="p-3 border-r border-white/5 flex items-center font-medium text-zinc-300 pl-8">
-                                Gastos Totales
-                            </div>
-                            {MONTHS.map((_, idx) => (
-                                <div key={idx} className={cn("p-2 border-r border-white/5 border-dashed", idx === 11 && "border-r-0")}>
-                                    <input 
-                                        type="number"
-                                        value={expenses[idx] === 0 ? "" : expenses[idx]}
-                                        onChange={(e) => updateExpenseValue(idx, e.target.value)}
-                                        className="w-full h-full bg-transparent outline-none text-center text-red-300 hover:bg-white/5 focus:bg-white/10 focus:text-red-400 rounded transition-colors hide-arrows text-[13px] font-medium"
-                                        placeholder="-"
-                                    />
-                                </div>
+                                </th>
                             ))}
-                        </div>
-                    </div>
-
-                    {/* NET SAVINGS PER MONTH */}
-                    <div className="grid grid-cols-[200px_repeat(12,1fr)] border-b border-white/10 bg-white/[0.02]">
-                        <div className="p-3 font-bold text-zinc-300 border-r border-white/5 text-right flex items-center justify-end pr-5 text-[13px]">
-                            Ahorro Neto Mes
-                        </div>
-                        {MONTHS.map((_, idx) => {
+                            <th className="p-4 border-r border-white/5 min-w-[150px] text-red-400/80"><TrendingDown className="w-3.5 h-3.5 inline mr-1"/> Gastos Totales</th>
+                            <th className="p-4 border-r border-white/5">Ahorro Neto</th>
+                            <th className="p-4 text-amber-500/80">Acumulado</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {MONTHS.map((m, idx) => {
                             const net = calcNetSavingsMonth(idx);
-                            return (
-                                <div key={idx} className={cn("px-1 py-3 border-r border-white/5 border-dashed flex items-center justify-center font-bold text-[13px]", idx === 11 && "border-r-0", net >= 0 ? "text-zinc-300" : "text-red-400")}>
-                                    {net > 0 ? "+" : ""}{formatCurrency(net)}
-                                </div>
-                            )
-                        })}
-                    </div>
-
-                    {/* ACCUMULATED SAVINGS (Main row) */}
-                    <div className="grid grid-cols-[200px_repeat(12,1fr)] bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b-2 border-amber-500/30">
-                        <div className="p-3 font-black text-amber-400 border-r border-white/10 flex items-center gap-2 text-[13px] sm:text-sm">
-                            <GripHorizontal className="w-4 h-4 shrink-0" /> Ahorro Acumulado
-                        </div>
-                        {MONTHS.map((_, idx) => {
                             const acc = calcAccumulated(idx);
                             return (
-                                <div key={idx} className={cn("px-1 py-4 border-r border-white/10 border-dashed flex items-center justify-center font-black", idx === 11 && "border-r-0")}>
-                                    <span className={cn("truncate", acc >= 0 ? "text-amber-400 text-[14px]" : "text-red-400 text-[13px]")}>{formatCurrency(acc)}</span>
-                                </div>
+                                <tr key={m} className="hover:bg-white/[0.01] transition-colors group">
+                                    <td className="p-4 sticky left-0 z-20 bg-[#0a0a0c] group-hover:bg-[#0c0c0e] border-r border-white/5 font-bold text-zinc-300">
+                                        {m} {activeYear}
+                                    </td>
+                                    
+                                    {incomes.map(inc => (
+                                        <td key={`${inc.id}-${m}`} className="p-0 border-r border-white/5">
+                                            <input 
+                                                type="number"
+                                                value={inc.values[idx] === 0 ? "" : inc.values[idx]}
+                                                onChange={(e) => updateIncomeValue(inc.id, idx, e.target.value)}
+                                                className="w-full h-full min-h-[50px] bg-transparent outline-none px-4 text-emerald-300 hover:bg-white/5 focus:bg-white/10 rounded transition-colors hide-arrows"
+                                                placeholder="-"
+                                            />
+                                        </td>
+                                    ))}
+
+                                    <td className="p-0 border-r border-white/5">
+                                        <input 
+                                            type="number"
+                                            value={expenses[idx] === 0 ? "" : expenses[idx]}
+                                            onChange={(e) => updateExpenseValue(idx, e.target.value)}
+                                            className="w-full h-full min-h-[50px] bg-transparent outline-none px-4 text-red-300 hover:bg-white/5 focus:bg-white/10 rounded transition-colors hide-arrows"
+                                            placeholder="-"
+                                        />
+                                    </td>
+                                    
+                                    <td className={cn("p-4 font-bold border-r border-white/5", net >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                        {net > 0 ? "+" : ""}{formatCurrency(net)}
+                                    </td>
+                                    
+                                    <td className={cn("p-4 font-black bg-gradient-to-r from-transparent to-white/[0.01]", acc >= 0 ? "text-amber-400" : "text-red-400")}>
+                                        {formatCurrency(acc)}
+                                    </td>
+                                </tr>
                             )
                         })}
-                    </div>
+                    </tbody>
+                </table>
+            </div>
+            
+            {/* MILESTONES SECTION */}
+            <div className="bg-black/40 pt-6 pb-8 border-t border-white/10">
+                <div className="px-5 py-3 flex items-center justify-between mb-4">
+                     <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                        <CalendarDays className="w-4 h-4 text-amber-500" /> Línea de Hitos (Milestones)
+                     </h3>
+                     <button onClick={addMilestone} className="btn-secondary text-xs py-1.5 px-3">
+                        <Plus className="w-3.5 h-3.5 mr-1" /> Añadir Hito
+                     </button>
+                </div>
+                
+                <div className="space-y-3 px-4">
+                    {milestones.length === 0 ? (
+                        <p className="text-xs text-zinc-600 italic px-2">Sin hitos definidos para este año.</p>
+                    ) : milestones.map((m) => {
+                        const startCol = m.startMonth + 2;
+                        const span = (m.endMonth >= m.startMonth ? m.endMonth - m.startMonth : 0) + 1;
+                        const accAtEnd = calcAccumulated(m.endMonth);
+                        const isFeasible = accAtEnd >= m.amount;
 
-                    {/* MILESTONES SECTION */}
-                    <div className="bg-black/40 pt-4 pb-8">
-                        <div className="px-5 py-3 flex items-center justify-between mb-2">
-                             <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                                <CalendarDays className="w-4 h-4 text-amber-500" /> Línea de Hitos (Milestones)
-                             </h3>
-                             <button onClick={addMilestone} className="btn-secondary text-xs py-1.5 px-3">
-                                <Plus className="w-3.5 h-3.5 mr-1" /> Añadir Hito
-                             </button>
-                        </div>
-                        
-                        <div className="space-y-3 px-4">
-                            {milestones.length === 0 ? (
-                                <p className="text-xs text-zinc-600 italic px-2">Sin hitos definidos para este año.</p>
-                            ) : milestones.map((m) => {
-                                // Calculate grid columns based on startMonth and endMonth
-                                const startCol = m.startMonth + 2; // +1 for 1-based index, +1 for the first 200px column
-                                const span = (m.endMonth >= m.startMonth ? m.endMonth - m.startMonth : 0) + 1;
-                                const accAtEnd = calcAccumulated(m.endMonth);
-                                const isFeasible = accAtEnd >= m.amount;
+                        return (
+                            <div key={m.id} className="grid grid-cols-[200px_repeat(12,1fr)] gap-0 w-full relative group items-center">
+                                 {/* Sidebar controls for the milestone */}
+                                 <div className="flex flex-col gap-1.5 pr-4 border-r border-white/5 py-2">
+                                     <div className="flex items-center justify-between gap-1">
+                                         <input 
+                                             value={m.name} 
+                                             onChange={(e) => updateMilestone(m.id, { name: e.target.value })}
+                                             className="w-full bg-transparent outline-none text-zinc-300 font-bold text-sm"
+                                             placeholder="Nombre..."
+                                         />
+                                         <button onClick={() => removeMilestone(m.id)} className="text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5"/></button>
+                                     </div>
+                                     <div className="flex items-center gap-1">
+                                        <input 
+                                            type="number"
+                                            value={m.amount === 0 ? "" : m.amount}
+                                            onChange={(e) => updateMilestone(m.id, { amount: Number(e.target.value) || 0 })}
+                                            className="w-1/2 bg-white/5 rounded px-2 py-1 text-xs text-zinc-300 outline-none focus:bg-white/10 hide-arrows"
+                                            placeholder="Costo"
+                                        />
+                                        <div className="flex items-center w-1/2 rounded bg-white/5 overflow-hidden">
+                                            <select value={m.startMonth} onChange={(e) => updateMilestone(m.id, { startMonth: Number(e.target.value) })} className="w-1/2 bg-transparent text-[10px] text-zinc-400 p-1 outline-none appearance-none text-center border-r border-white/10">
+                                                {MONTHS.map((mo, i) => <option key={mo+i} value={i} className="bg-zinc-900">{mo}</option>)}
+                                            </select>
+                                            <select value={m.endMonth} onChange={(e) => updateMilestone(m.id, { endMonth: Number(e.target.value) })} className="w-1/2 bg-transparent text-[10px] text-zinc-400 p-1 outline-none appearance-none text-center">
+                                                {MONTHS.map((mo, i) => <option key={mo+i} value={i} className="bg-zinc-900">{mo}</option>)}
+                                            </select>
+                                        </div>
+                                     </div>
+                                 </div>
 
-                                return (
-                                    <div key={m.id} className="grid grid-cols-[200px_repeat(12,1fr)] gap-0 w-full relative group">
-                                         {/* Sidebar controls for the milestone */}
-                                         <div className="flex flex-col gap-1 pr-4">
-                                             <div className="flex items-center justify-between gap-1">
-                                                 <input 
-                                                     value={m.name} 
-                                                     onChange={(e) => updateMilestone(m.id, { name: e.target.value })}
-                                                     className="w-full bg-transparent outline-none text-zinc-300 font-bold text-sm"
-                                                     placeholder="Nombre..."
-                                                 />
-                                                 <button onClick={() => removeMilestone(m.id)} className="text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5"/></button>
-                                             </div>
-                                             <div className="flex items-center gap-1">
-                                                <input 
-                                                    type="number"
-                                                    value={m.amount === 0 ? "" : m.amount}
-                                                    onChange={(e) => updateMilestone(m.id, { amount: Number(e.target.value) || 0 })}
-                                                    className="w-1/2 bg-white/5 rounded px-2 py-1 text-xs text-zinc-300 outline-none focus:bg-white/10 hide-arrows"
-                                                    placeholder="Costo"
-                                                />
-                                                <div className="flex items-center w-1/2 rounded bg-white/5 overflow-hidden">
-                                                    <select value={m.startMonth} onChange={(e) => updateMilestone(m.id, { startMonth: Number(e.target.value) })} className="w-1/2 bg-transparent text-[10px] text-zinc-400 p-1 outline-none appearance-none text-center border-r border-white/10">
-                                                        {MONTHS.map((mo, i) => <option key={mo+i} value={i} className="bg-zinc-900">{mo}</option>)}
-                                                    </select>
-                                                    <select value={m.endMonth} onChange={(e) => updateMilestone(m.id, { endMonth: Number(e.target.value) })} className="w-1/2 bg-transparent text-[10px] text-zinc-400 p-1 outline-none appearance-none text-center">
-                                                        {MONTHS.map((mo, i) => <option key={mo+i} value={i} className="bg-zinc-900">{mo}</option>)}
-                                                    </select>
-                                                </div>
-                                             </div>
-                                         </div>
-
-                                         {/* The visual block */}
-                                         <div className="col-span-12 relative flex">
-                                             {/* Background guides */}
-                                             <div className="grid grid-cols-12 w-full absolute inset-0 pointer-events-none">
-                                                {MONTHS.map((_, i) => <div key={i} className={cn("border-l border-white/5", i===0 && "border-transparent")} />)}
-                                             </div>
-                                             
-                                             <div 
-                                                className={cn(
-                                                    "h-full mt-1 mb-1 rounded-xl border flex flex-col justify-center px-4 relative overflow-hidden transition-all shadow-lg",
-                                                    isFeasible ? "bg-amber-500/10 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)]" : "bg-red-500/10 border-red-500/30"
-                                                )}
-                                                style={{
-                                                     gridColumnStart: m.startMonth + 1,
-                                                     gridColumnEnd: `span ${span}`,
-                                                     display: "grid" // We override display just for the specific column span placement
-                                                }}
-                                             >
-                                                <div className="flex items-center justify-between z-10">
-                                                    <span className={cn("font-bold text-sm whitespace-nowrap", isFeasible ? "text-amber-400" : "text-red-400")}>{m.name}</span>
-                                                    <span className={cn("font-black text-sm whitespace-nowrap ml-4", isFeasible ? "text-amber-500" : "text-red-500")}>{formatCurrency(m.amount)}</span>
-                                                </div>
-                                                <div className="flex justify-between mt-1 z-10">
-                                                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{MONTHS[m.startMonth]} - {MONTHS[m.endMonth]}</span>
-                                                    {!isFeasible && <span className="text-[10px] text-red-500 uppercase font-bold bg-red-500/10 px-1 rounded">INSOLVENTE</span>}
-                                                </div>
-                                             </div>
-                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                                 {/* The visual block */}
+                                 <div className="col-span-12 relative flex h-14 items-center">
+                                     {/* Background guides */}
+                                     <div className="grid grid-cols-12 w-full absolute inset-0 pointer-events-none">
+                                        {MONTHS.map((_, i) => <div key={i} className={cn("border-l border-white/5", i===0 && "border-transparent")} />)}
+                                     </div>
+                                     
+                                     <div 
+                                        className={cn(
+                                            "h-10 rounded-xl border flex flex-col justify-center px-4 relative overflow-hidden transition-all shadow-lg",
+                                            isFeasible ? "bg-amber-500/10 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)]" : "bg-red-500/10 border-red-500/30"
+                                        )}
+                                        style={{
+                                             gridColumnStart: m.startMonth + 1,
+                                             gridColumnEnd: `span ${span}`,
+                                             display: "grid"
+                                        }}
+                                     >
+                                        <div className="flex items-center justify-between z-10 w-full overflow-hidden">
+                                            <span className={cn("font-bold text-xs truncate", isFeasible ? "text-amber-400" : "text-red-400")}>{m.name}</span>
+                                            {!isFeasible && <span className="text-[9px] text-red-500 uppercase font-bold bg-red-500/10 px-1 rounded ml-2 shrink-0">INSOLVENTE</span>}
+                                        </div>
+                                     </div>
+                                 </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>

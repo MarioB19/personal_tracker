@@ -9,7 +9,7 @@ import {
   removeFinance,
 } from "@/lib/repositories/firestore";
 import { db } from "@/lib/firebase/config";
-import { collection, query, where, getDocs, doc, setDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
 import {
   Income,
   Expense,
@@ -233,6 +233,7 @@ export default function FinanzasPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [savings, setSavings] = useState<Saving[]>([]);
+  const [initialSavings, setInitialSavings] = useState<number>(0);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -288,6 +289,7 @@ export default function FinanzasPage() {
       const spDoc = snap.docs[0];
       const data = spDoc.data();
       const initial = data.initialSavings || 0;
+      setInitialSavings(initial);
       const incs = data.incomeSources || [];
       const exps = data.expensesValues || [];
       const acts = data.actualSavingsValues || Array(12).fill(0);
@@ -355,7 +357,7 @@ export default function FinanzasPage() {
     .filter((d) => d.status === "ACTIVE")
     .reduce((s, d) => s + d.currentBalance, 0);
   const netBalance = totalIncome - totalExpenses;
-  const totalSaved = savings.reduce((s, sv) => s + sv.actualAmount, 0);
+  const totalSaved = initialSavings + savings.reduce((s, sv) => s + sv.actualAmount, 0);
   const avgCostPerHour =
     incomes.length > 0
       ? incomes.reduce((s, i) => s + i.costPerHour, 0) / incomes.length
@@ -486,13 +488,14 @@ export default function FinanzasPage() {
 
   const saveSaving = async () => {
     if (!uid || !editingId) return;
-    const [docId, monthIdxStr] = editingId.split("_");
-    const mIdx = parseInt(monthIdxStr);
+    const parts = editingId.split("_");
+    const mIdx = parseInt(parts.pop() || "0");
+    const docId = parts.join("_");
 
     const ref = doc(db, "savings_plans", docId);
-    const snap = await getDocs(query(collection(db, "savings_plans"), where("__name__", "==", docId)));
-    if(!snap.empty) {
-        const data = snap.docs[0].data();
+    const snap = await getDoc(ref);
+    if(snap.exists()) {
+        const data = snap.data();
         const acts = data.actualSavingsValues || Array(12).fill(0);
         acts[mIdx] = Number(sActual) || 0;
         await setDoc(ref, { actualSavingsValues: acts }, { merge: true });
@@ -672,6 +675,13 @@ export default function FinanzasPage() {
                   label: "Gastos fijos",
                   value: formatCurrency(
                     expenses.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)
+                  ),
+                  highlight: false,
+                },
+                {
+                  label: "Suscripciones",
+                  value: formatCurrency(
+                    expenses.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)
                   ),
                   highlight: false,
                 },
@@ -938,7 +948,18 @@ export default function FinanzasPage() {
             }
           >
             {savings.length > 0 ? (
-              <div>
+              <div className="divide-y divide-white/[0.04]">
+                {initialSavings > 0 && (
+                  <div className="flex items-center justify-between py-4 px-5 group">
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="text-sm font-bold text-amber-400 truncate flex items-center gap-2"><PiggyBank className="w-4 h-4" /> Ahorro Base Inicial</p>
+                      <p className="text-[12px] text-zinc-500 mt-0.5">Saldo inicial al comenzar el planificador</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold text-amber-400">{formatCurrency(initialSavings)}</span>
+                    </div>
+                  </div>
+                )}
                 {savings.map((s) => (
                   <ListRow
                     key={s.id}

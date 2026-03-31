@@ -8,7 +8,7 @@ import { BarChart3, Target, Clock, Wallet, Trophy, Zap } from "lucide-react";
 import { formatCurrency, formatPercent, cn } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, RadialBarChart, RadialBar,
+  PieChart, Pie, Cell, RadialBarChart, RadialBar, LineChart, Line, CartesianGrid, Legend, AreaChart, Area
 } from "recharts";
 
 function parseTimeToHours(start: string, end: string): number {
@@ -82,6 +82,30 @@ export default function AnaliticaPage() {
     { name: "Misiones", value: totalMissions > 0 ? Math.round((completedMissions / totalMissions) * 100) : 0, fill: "#a855f7" },
   ].filter(d => d.value > 0 || d.name === "Metas");
 
+  // Trend Data (Income vs Expense over time by Month)
+  const currentYear = new Date().getFullYear();
+  const monthlyDataMap: Record<number, { name: string; income: number; expense: number }> = {};
+  const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  for (let i = 0; i < 12; i++) {
+     monthlyDataMap[i] = { name: monthNames[i], income: 0, expense: 0 };
+  }
+  
+  incomes.forEach(inc => {
+      const parts = inc.month?.split("-") || [];
+      if(parts.length >= 2 && Number(parts[0]) === currentYear) {
+          monthlyDataMap[Number(parts[1]) - 1].income += inc.netIncome;
+      }
+  });
+
+  expenses.forEach(exp => {
+      const parts = exp.month?.split("-") || [];
+      if(parts.length >= 2 && Number(parts[0]) === currentYear) {
+          monthlyDataMap[Number(parts[1]) - 1].expense += exp.amount;
+      }
+  });
+
+  const trendData = Object.values(monthlyDataMap);
+
   if (loading) return (
     <div className="page-enter space-y-6">
       <div className="h-10 w-48 skeleton" />
@@ -134,40 +158,68 @@ export default function AnaliticaPage() {
       {hasData ? (
         <>
           {/* Charts row */}
-          {/* Charts row */}
-          <div className="grid grid-cols-1 gap-4">
-            {/* Expense distribution */}
-            <div className="glass-card-static p-5">
-              <h2 className="text-[13px] font-semibold mb-4 flex items-center gap-2">
-                <Wallet className="w-3.5 h-3.5 text-amber-400" /> Gastos por categoría
-              </h2>
-              {expenseCategoryData.length > 0 ? (
-                <div className="flex items-center gap-4">
-                  <ResponsiveContainer width="50%" height={260}>
-                    <PieChart>
-                      <Pie data={expenseCategoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={90} strokeWidth={0}>
-                        {expenseCategoryData.map((entry, i) => <Cell key={i} fill={entry.color} fillOpacity={0.8} />)}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex-1 space-y-3">
-                    {expenseCategoryData.map((d, i) => (
-                      <div key={i} className="flex items-center gap-3 text-[11px]">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                        <span className="text-zinc-400 flex-1">{d.name}</span>
-                        <span className="text-zinc-300 font-medium">{formatCurrency(d.value)}</span>
-                      </div>
-                    ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Expense distribution */}
+              <div className="glass-card-static p-5 lg:col-span-1">
+                <h2 className="text-[13px] font-semibold mb-4 flex items-center gap-2">
+                  <Wallet className="w-3.5 h-3.5 text-amber-400" /> Distribución
+                </h2>
+                {expenseCategoryData.length > 0 ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie data={expenseCategoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={45} outerRadius={70} strokeWidth={0}>
+                          {expenseCategoryData.map((entry, i) => <Cell key={i} fill={entry.color} fillOpacity={0.8} />)}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="w-full space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-2">
+                      {expenseCategoryData.map((d, i) => (
+                        <div key={i} className="flex items-center gap-3 text-[10px]">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                          <span className="text-zinc-400 flex-1 truncate">{d.name}</span>
+                          <span className="text-zinc-300 font-medium">{formatCurrency(d.value)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                ) : (
+                  <div className="h-[220px] flex items-center justify-center">
+                    <p className="text-[11px] text-zinc-600">Agrega gastos para ver la distribución</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Trend Chart */}
+              <div className="glass-card-static p-5 lg:col-span-2">
+                <h2 className="text-[13px] font-semibold mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-400" /> Tendencia {currentYear}
+                </h2>
+                <div className="h-[250px] w-full mt-4">
+                   <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                          <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={10} tickLine={false} axisLine={false} />
+                          <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v/1000}k`} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Area type="monotone" dataKey="income" name="Ingresos" stroke="#10b981" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={2}/>
+                          <Area type="monotone" dataKey="expense" name="Gastos" stroke="#ef4444" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={2}/>
+                      </AreaChart>
+                   </ResponsiveContainer>
                 </div>
-              ) : (
-                <div className="h-[220px] flex items-center justify-center">
-                  <p className="text-[11px] text-zinc-600">Agrega gastos para ver la distribución</p>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
 
           {/* Completion rates */}
           <div className="glass-card-static p-5">
