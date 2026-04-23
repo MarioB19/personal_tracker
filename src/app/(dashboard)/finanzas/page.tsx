@@ -453,7 +453,7 @@ export default function FinanzasPage() {
       amount: Number(eAmount) || 0,
       type: eType,
       frequency: "MENSUAL" as Frequency,
-      chargeDay: eType === "SUSCRIPCION" && eChargeDay ? Number(eChargeDay) : undefined,
+      chargeDay: (eType === "SUSCRIPCION" || eType === "FIJO") && eChargeDay ? Number(eChargeDay) : undefined,
       month: currentMonth,
       isNecessity: true,
       notes: "",
@@ -838,7 +838,7 @@ export default function FinanzasPage() {
                 <ListRow
                   key={e.id}
                   title={e.name}
-                  subtitle={`${e.category} · ${e.type}${e.type === "FIJO" && e.chargeDay ? ` · Día ${e.chargeDay}` : ""}`}
+                  subtitle={`${e.category} · ${e.type}${(e.type === "FIJO" || e.type === "SUSCRIPCION") && e.chargeDay ? ` · Cargo día ${e.chargeDay}` : ""}`}
                   right={
                     <div className="flex items-center gap-2">
                       <span className={cn(
@@ -1144,7 +1144,7 @@ export default function FinanzasPage() {
               </div>
             </div>
             
-            {eType === "SUSCRIPCION" && (
+            {(eType === "SUSCRIPCION" || eType === "FIJO") && (
               <div className="col-span-2">
                 <label className="label">Día de cargo en el mes</label>
                 <input type="number" min={1} max={31} value={eChargeDay} onChange={(e) => setEChargeDay(e.target.value)} placeholder="Ej. 19" className="input" />
