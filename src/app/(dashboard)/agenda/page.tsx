@@ -25,7 +25,8 @@ import {
   CalendarCheck,
   Search,
   Clock,
-  Filter
+  Filter,
+  Edit2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -179,6 +180,68 @@ export default function AgendaPage() {
   // Modal states for clicking blocks and viewing details
   const [selectedBlockForModal, setSelectedBlockForModal] = useState<TimeBlock | TemplateSlot | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Modal Edit states
+  const [isEditingBlock, setIsEditingBlock] = useState(false);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [editingCategory, setEditingCategory] = useState<BlockCategory>("TRABAJO");
+
+  // Sync modal editing fields when a block is selected
+  useEffect(() => {
+    if (selectedBlockForModal) {
+      setEditingTitle(selectedBlockForModal.title);
+      setEditingCategory(selectedBlockForModal.category);
+      setIsEditingBlock(false);
+    }
+  }, [selectedBlockForModal]);
+
+  const handleUpdateBlock = async () => {
+    if (!selectedBlockForModal || !editingTitle.trim()) return;
+    
+    if (view === "template") {
+      const globalIndex = template.findIndex(
+        t => t.day === selectedBlockForModal.day && 
+             t.startTime === selectedBlockForModal.startTime && 
+             t.endTime === selectedBlockForModal.endTime && 
+             t.title === selectedBlockForModal.title
+      );
+      if (globalIndex !== -1) {
+        setTemplate(prev => {
+          const copy = [...prev];
+          copy[globalIndex] = {
+            ...copy[globalIndex],
+            title: editingTitle,
+            category: editingCategory
+          };
+          return copy;
+        });
+      }
+    } else {
+      const timeBlock = selectedBlockForModal as TimeBlock;
+      setBlocks(prev => prev.map(b => {
+        if (b.id === timeBlock.id) {
+          return { ...b, title: editingTitle, category: editingCategory };
+        }
+        return b;
+      }));
+      
+      if (uid) {
+        try {
+          await update(uid, "timeBlocks", timeBlock.id, {
+            title: editingTitle,
+            category: editingCategory
+          });
+        } catch (err) {
+          console.error("Error updating block details:", err);
+          alert("Hubo un error al guardar los cambios en el servidor.");
+          loadData();
+        }
+      }
+    }
+    
+    setIsModalOpen(false);
+    setSelectedBlockForModal(null);
+  };
 
   // Statistics Modal states
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
@@ -1786,14 +1849,26 @@ export default function AgendaPage() {
             <div className="relative w-full max-w-md bg-[#0c0c0e] border border-white/10 rounded-3xl p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200 flex flex-col space-y-5">
               
               <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className={cn("p-2 rounded-xl bg-white/5 border border-white/5", cfg.text)}>
-                    <CategoryIcon className="w-5 h-5" />
+                <div className="flex items-center gap-2.5 w-full mr-2">
+                  <div className={cn("p-2 rounded-xl bg-white/5 border border-white/5 shrink-0", isEditingBlock ? CATEGORY_CONFIG[editingCategory].text : cfg.text)}>
+                    {(() => {
+                      const DynamicIcon = isEditingBlock ? CATEGORY_CONFIG[editingCategory].icon : CategoryIcon;
+                      return <DynamicIcon className="w-5 h-5" />;
+                    })()}
                   </div>
-                  <div>
-                    <h3 className="text-base font-black text-white leading-none truncate max-w-[220px]">
-                      {block.title}
-                    </h3>
+                  <div className="w-full truncate">
+                    {isEditingBlock ? (
+                      <input 
+                        value={editingTitle} 
+                        onChange={(e) => setEditingTitle(e.target.value)} 
+                        placeholder="Nombre de la actividad..."
+                        className="w-full px-3 py-1.5 bg-white/[0.02] border border-white/10 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors font-semibold"
+                      />
+                    ) : (
+                      <h3 className="text-base font-black text-white leading-none truncate max-w-[220px]">
+                        {block.title}
+                      </h3>
+                    )}
                     <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1 tracking-wider">
                       Día: {DAYS.find(d => d.key === block.day)?.label}
                     </p>
@@ -1801,7 +1876,7 @@ export default function AgendaPage() {
                 </div>
                 <button 
                   onClick={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }}
-                  className="w-7 h-7 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                  className="w-7 h-7 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white transition-colors shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1819,15 +1894,36 @@ export default function AgendaPage() {
                   </div>
                 </div>
 
-                <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between">
-                  <div>
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
-                    <span className="font-black text-zinc-200">{cfg.label}</span>
+                {isEditingBlock ? (
+                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between gap-4">
+                    <div>
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
+                      <select
+                        value={editingCategory}
+                        onChange={(e) => setEditingCategory(e.target.value as BlockCategory)}
+                        className="bg-[#0c0c0e]/80 border border-white/10 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-amber-500/50 font-semibold"
+                        style={{ colorScheme: "dark" }}
+                      >
+                        {CATEGORIES.map(c => (
+                          <option key={c} value={c}>{CATEGORY_CONFIG[c].label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", CATEGORY_CONFIG[editingCategory].bg, CATEGORY_CONFIG[editingCategory].text)}>
+                      {editingCategory}
+                    </span>
                   </div>
-                  <span className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
-                    {block.category}
-                  </span>
-                </div>
+                ) : (
+                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
+                      <span className="font-black text-zinc-200">{cfg.label}</span>
+                    </div>
+                    <span className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
+                      {block.category}
+                    </span>
+                  </div>
+                )}
 
                 {view !== "template" && (
                   <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between">
@@ -1846,29 +1942,53 @@ export default function AgendaPage() {
                 )}
               </div>
 
-              <div className="border-t border-white/5 pt-4 flex items-center justify-end gap-3 shrink-0">
-                <button
-                  onClick={async () => {
-                    const idToDelete = block.id;
-                    const indexToDelete = globalIndex;
-                    
-                    if (window.confirm("¿Estás seguro de que deseas eliminar este bloque de tiempo?")) {
-                      await deleteBlock(idToDelete, indexToDelete);
-                      setIsModalOpen(false);
-                      setSelectedBlockForModal(null);
-                    }
-                  }}
-                  className="flex items-center gap-1 text-[10px] font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 px-3 py-2 rounded-xl transition-all active:scale-95"
-                >
-                  <X className="w-3.5 h-3.5" /> Eliminar Bloque
-                </button>
-                <button 
-                  onClick={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }}
-                  className="btn-secondary text-[10px] font-bold px-4 py-2 rounded-xl h-auto"
-                >
-                  Cerrar
-                </button>
-              </div>
+              {isEditingBlock ? (
+                <div className="border-t border-white/5 pt-4 flex items-center justify-end gap-3 shrink-0">
+                  <button 
+                    onClick={() => setIsEditingBlock(false)}
+                    className="btn-secondary text-[10px] font-bold px-4 py-2 rounded-xl h-auto"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleUpdateBlock}
+                    disabled={!editingTitle.trim()}
+                    className="btn-primary text-[10px] font-black px-4 py-2 rounded-xl h-auto flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-orange-500 shadow-[0_0_15px_rgba(245,158,11,0.15)] disabled:opacity-50 transition-all duration-300"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Guardar Cambios
+                  </button>
+                </div>
+              ) : (
+                <div className="border-t border-white/5 pt-4 flex items-center justify-end gap-2.5 shrink-0">
+                  <button
+                    onClick={async () => {
+                      const idToDelete = block.id;
+                      const indexToDelete = globalIndex;
+                      
+                      if (window.confirm("¿Estás seguro de que deseas eliminar este bloque de tiempo?")) {
+                        await deleteBlock(idToDelete, indexToDelete);
+                        setIsModalOpen(false);
+                        setSelectedBlockForModal(null);
+                      }
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-bold text-red-400 bg-red-500/5 hover:bg-red-500/10 border border-red-500/10 px-3 py-2 rounded-xl transition-all active:scale-95 shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" /> Eliminar Bloque
+                  </button>
+                  <button
+                    onClick={() => setIsEditingBlock(true)}
+                    className="flex items-center gap-1.5 text-[10px] font-black text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/10 px-3.5 py-2 rounded-xl transition-all active:scale-95 shrink-0"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  <button 
+                    onClick={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }}
+                    className="btn-secondary text-[10px] font-bold px-4 py-2 rounded-xl h-auto shrink-0"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              )}
 
             </div>
           </div>
