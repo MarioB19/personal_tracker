@@ -185,18 +185,33 @@ export default function AgendaPage() {
   const [isEditingBlock, setIsEditingBlock] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
   const [editingCategory, setEditingCategory] = useState<BlockCategory>("TRABAJO");
+  const [editingStartTime, setEditingStartTime] = useState("09:00");
+  const [editingEndTime, setEditingEndTime] = useState("10:00");
 
   // Sync modal editing fields when a block is selected
   useEffect(() => {
     if (selectedBlockForModal) {
       setEditingTitle(selectedBlockForModal.title);
       setEditingCategory(selectedBlockForModal.category);
+      setEditingStartTime(selectedBlockForModal.startTime);
+      setEditingEndTime(selectedBlockForModal.endTime);
       setIsEditingBlock(false);
     }
   }, [selectedBlockForModal]);
 
   const handleUpdateBlock = async () => {
-    if (!selectedBlockForModal || !editingTitle.trim()) return;
+    if (!selectedBlockForModal || !editingTitle.trim() || !editingStartTime || !editingEndTime) {
+      alert("Por favor, completa todos los campos del bloque.");
+      return;
+    }
+
+    const startMin = parseTimeToMinutes(editingStartTime);
+    const endMin = editingEndTime === "24:00" ? 24 * 60 : parseTimeToMinutes(editingEndTime);
+
+    if (startMin >= endMin) {
+      alert("Error: La hora de inicio debe ser anterior a la hora de término.");
+      return;
+    }
     
     if (view === "template") {
       const globalIndex = template.findIndex(
@@ -206,21 +221,54 @@ export default function AgendaPage() {
              t.title === selectedBlockForModal.title
       );
       if (globalIndex !== -1) {
+        // Check overlaps with other template slots
+        const overlapping = template.find((t, idx) => 
+          idx !== globalIndex &&
+          t.day === selectedBlockForModal.day && 
+          checkOverlap(editingStartTime, editingEndTime, t.startTime, t.endTime)
+        );
+
+        if (overlapping) {
+          alert(`No se puede guardar: Este horario se traslapa con el bloque "${overlapping.title}" (${overlapping.startTime} - ${overlapping.endTime}).`);
+          return;
+        }
+
         setTemplate(prev => {
           const copy = [...prev];
           copy[globalIndex] = {
             ...copy[globalIndex],
             title: editingTitle,
-            category: editingCategory
+            category: editingCategory,
+            startTime: editingStartTime,
+            endTime: editingEndTime
           };
-          return copy;
+          return copy.sort((a, b) => a.startTime.localeCompare(b.startTime));
         });
       }
     } else {
       const timeBlock = selectedBlockForModal as TimeBlock;
+      
+      // Check overlaps with other week blocks
+      const overlapping = weekBlocks.find(b => 
+        b.id !== timeBlock.id &&
+        b.day === timeBlock.day && 
+        checkOverlap(editingStartTime, editingEndTime, b.startTime, b.endTime)
+      );
+
+      if (overlapping) {
+        alert(`No se puede guardar: Este horario se traslapa con el bloque "${overlapping.title}" (${overlapping.startTime} - ${overlapping.endTime}).`);
+        return;
+      }
+
       setBlocks(prev => prev.map(b => {
         if (b.id === timeBlock.id) {
-          return { ...b, title: editingTitle, category: editingCategory };
+          return { 
+            ...b, 
+            title: editingTitle, 
+            category: editingCategory,
+            startTime: editingStartTime,
+            endTime: editingEndTime
+          };
         }
         return b;
       }));
@@ -229,7 +277,9 @@ export default function AgendaPage() {
         try {
           await update(uid, "timeBlocks", timeBlock.id, {
             title: editingTitle,
-            category: editingCategory
+            category: editingCategory,
+            startTime: editingStartTime,
+            endTime: editingEndTime
           });
         } catch (err) {
           console.error("Error updating block details:", err);
@@ -1883,16 +1933,41 @@ export default function AgendaPage() {
               </div>
 
               <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Horario</span>
-                    <span className="font-mono text-zinc-200 font-bold">{block.startTime} - {block.endTime}</span>
+                {isEditingBlock ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Inicio</span>
+                      <input 
+                        type="time" 
+                        value={editingStartTime} 
+                        onChange={(e) => setEditingStartTime(e.target.value)} 
+                        className="w-full px-2 py-1 bg-black/30 border border-white/5 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500/50 block font-mono font-semibold" 
+                        style={{ colorScheme: "dark" }}
+                      />
+                    </div>
+                    <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Término</span>
+                      <input 
+                        type="time" 
+                        value={editingEndTime} 
+                        onChange={(e) => setEditingEndTime(e.target.value)} 
+                        className="w-full px-2 py-1 bg-black/30 border border-white/5 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500/50 block font-mono font-semibold" 
+                        style={{ colorScheme: "dark" }}
+                      />
+                    </div>
                   </div>
-                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Duración</span>
-                    <span className="font-mono text-zinc-200 font-bold">{duration.toFixed(1)} horas</span>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Horario</span>
+                      <span className="font-mono text-zinc-200 font-bold">{block.startTime} - {block.endTime}</span>
+                    </div>
+                    <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Duración</span>
+                      <span className="font-mono text-zinc-200 font-bold">{duration.toFixed(1)} horas</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {isEditingBlock ? (
                   <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between gap-4">
