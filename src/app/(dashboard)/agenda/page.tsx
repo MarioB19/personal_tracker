@@ -119,6 +119,25 @@ function getISOWeek(date: Date): string {
   return `${d.getFullYear()}-W${weekNum.toString().padStart(2, "0")}`;
 }
 
+function normalizeActivityTitle(title: string): string {
+  if (!title) return "Sin título";
+  const t = title.trim().toLowerCase();
+
+  const isDaskalosRelated = t.includes("daskalos") || t.includes("daksalos") || t.includes("dasaklos") || t.includes("dáskalos");
+  const isReunion = t.includes("reunion") || t.includes("reunión");
+
+  if (isDaskalosRelated && isReunion) {
+    return "Daskalos";
+  }
+
+  const isRed = t.includes("red");
+  if (isDaskalosRelated && isRed && t.includes("+")) {
+    return "Daskalos + Red";
+  }
+
+  return title.trim();
+}
+
 interface TemplateSlot {
   id?: string;
   day: DayOfWeek;
@@ -249,8 +268,8 @@ export default function AgendaPage() {
     if (b.category && categoryHours[b.category as BlockCategory] !== undefined) {
       categoryHours[b.category as BlockCategory] += hrs;
     }
-    const titleTrim = b.title ? b.title.trim() : "Sin título";
-    activityHoursMap[titleTrim] = (activityHoursMap[titleTrim] || 0) + hrs;
+    const normalized = normalizeActivityTitle(b.title || "");
+    activityHoursMap[normalized] = (activityHoursMap[normalized] || 0) + hrs;
   });
 
   const totalCalculatedHours = Object.values(categoryHours).reduce((sum, h) => sum + h, 0);
@@ -984,7 +1003,7 @@ export default function AgendaPage() {
 
             <div className="flex-1 space-y-2 max-h-[175px] overflow-y-auto scrollbar-thin my-1 pr-1">
               {sortedActivities.slice(0, 5).map((act, index) => {
-                const matchedBlock = activeBlocks.find(b => b.title?.trim() === act.title);
+                const matchedBlock = activeBlocks.find(b => normalizeActivityTitle(b.title || "") === act.title);
                 const category = matchedBlock ? matchedBlock.category : "PERSONAL";
                 const cfg = CATEGORY_CONFIG[category as BlockCategory] || CATEGORY_CONFIG.PERSONAL;
                 const Icon = cfg.icon;
@@ -1092,7 +1111,7 @@ export default function AgendaPage() {
                         {dayBlocks.map((block, idx) => {
                           const cfg = CATEGORY_CONFIG[block.category as BlockCategory] || CATEGORY_CONFIG.PERSONAL;
                           const CategoryIcon = cfg.icon;
-                          const isCompleted = isBlockCompleted(block);
+                          const isCompleted = isBlockCompleted(block as TimeBlock);
                           
                           const startMin = parseTimeToMinutes(block.startTime);
                           const endMin = block.endTime === "24:00" ? 24 * 60 : parseTimeToMinutes(block.endTime);
@@ -1631,7 +1650,7 @@ export default function AgendaPage() {
                 const maxHours = Math.max(...sortedActivities.map(a => a.hours), 1);
 
                 return filteredStats.map((act, index) => {
-                  const matchedBlock = activeBlocks.find(b => b.title?.trim() === act.title);
+                  const matchedBlock = activeBlocks.find(b => normalizeActivityTitle(b.title || "") === act.title);
                   const category = matchedBlock ? matchedBlock.category : "PERSONAL";
                   const cfg = CATEGORY_CONFIG[category as BlockCategory] || CATEGORY_CONFIG.PERSONAL;
                   const Icon = cfg.icon;
