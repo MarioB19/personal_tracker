@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
-import { getAll, create, remove } from "@/lib/repositories/firestore";
+import { getAll, create, remove, update } from "@/lib/repositories/firestore";
 import { TimeBlock, DayOfWeek, BlockCategory, BlockStatus } from "@/lib/types";
 import { db } from "@/lib/firebase/config";
 import { doc, getDoc, setDoc } from "firebase/firestore";
@@ -23,7 +23,9 @@ import {
   Smile,
   Copy,
   CalendarCheck,
-  Search
+  Search,
+  Clock,
+  Filter
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -181,6 +183,154 @@ export default function AgendaPage() {
   // Statistics Modal states
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
   const [statsSearchQuery, setStatsSearchQuery] = useState("");
+
+  // Filtering states
+  const [filterText, setFilterText] = useState("");
+  const [filterCategory, setFilterCategory] = useState<BlockCategory | "ALL">("ALL");
+
+  // Drag & Drop states
+  const [draggedBlock, setDraggedBlock] = useState<{
+    block: TimeBlock | TemplateSlot;
+    type: "week" | "template";
+  } | null>(null);
+  const [draggedOverDay, setDraggedOverDay] = useState<DayOfWeek | null>(null);
+
+  // Time conversion utilities
+  const formatMinutesToTime = (min: number): string => {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  };
+
+  // Click-to-Add on empty column space
+  const handleColumnClick = (dayKey: DayOfWeek, e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    const minutes = (clickY / rect.height) * 1440;
+    
+    // Round to nearest 30 mins
+    const roundedMin = Math.round(minutes / 30) * 30;
+    const startMin = Math.max(0, Math.min(1440 - 60, roundedMin));
+    const endMin = startMin + 60; // default 1 hour
+    
+    setSelectedDay(dayKey);
+    setStartTime(formatMinutesToTime(startMin));
+    setEndTime(formatMinutesToTime(endMin));
+    setTitle("");
+    setCategory("TRABAJO");
+    setShowForm(true);
+  };
+
+  // Drag & Drop Event Handlers
+  const handleDragStart = (e: React.DragEvent, block: TimeBlock | TemplateSlot, type: "week" | "template") => {
+    setDraggedBlock({ block, type });
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", block.title);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, targetDay: DayOfWeek, type: "week" | "template") => {
+    e.preventDefault();
+    if (!draggedBlock) return;
+    const { block: dBlock, type: dType } = draggedBlock;
+    
+    if (dType !== type) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropY = e.clientY - rect.top;
+    const minutes = (dropY / rect.height) * 1440;
+    
+    const originalStartMin = parseTimeToMinutes(dBlock.startTime);
+    const originalEndMin = dBlock.endTime === "24:00" ? 24 * 60 : parseTimeToMinutes(dBlock.endTime);
+    const durationMin = originalEndMin - originalStartMin;
+    
+    let newStartMin = Math.round(minutes / 30) * 30;
+    if (newStartMin + durationMin > 1440) {
+      newStartMin = 1440 - durationMin;
+    }
+    newStartMin = Math.max(0, newStartMin);
+    const newEndMin = newStartMin + durationMin;
+    
+    const newStartStr = formatMinutesToTime(newStartMin);
+    const newEndStr = formatMinutesToTime(newEndMin);
+    
+    if (type === "week") {
+      const timeBlock = dBlock as TimeBlock;
+      const overlapping = weekBlocks.find(b => 
+        b.id !== timeBlock.id &&
+        b.day === targetDay && 
+        checkOverlap(newStartStr, newEndStr, b.startTime, b.endTime)
+      );
+      if (overlapping) {
+        alert(`No se puede mover: Este horario se traslapa con el bloque "${overlapping.title}" (${overlapping.startTime} - ${overlapping.endTime}).`);
+        setDraggedBlock(null);
+        return;
+      }
+      
+      // Optimistic update
+      setBlocks(prev => prev.map(b => {
+        if (b.id === timeBlock.id) {
+          return { ...b, day: targetDay, startTime: newStartStr, endTime: newEndStr };
+        }
+        return b;
+      }));
+      
+      if (uid) {
+        try {
+          await update(uid, "timeBlocks", timeBlock.id, {
+            day: targetDay,
+            startTime: newStartStr,
+            endTime: newEndStr
+          });
+        } catch (err) {
+          console.error("Error updating block position:", err);
+          alert("Hubo un error al guardar el movimiento en el servidor.");
+          loadData();
+        }
+      }
+    } else {
+      const slot = dBlock as TemplateSlot;
+      const originalIndex = template.findIndex(t => 
+        t.day === slot.day && 
+        t.startTime === slot.startTime && 
+        t.endTime === slot.endTime && 
+        t.title === slot.title
+      );
+      
+      if (originalIndex === -1) return;
+      
+      const overlapping = template.find((t, idx) => 
+        idx !== originalIndex &&
+        t.day === targetDay && 
+        checkOverlap(newStartStr, newEndStr, t.startTime, t.endTime)
+      );
+      if (overlapping) {
+        alert(`No se puede mover: Este horario se traslapa con el bloque "${overlapping.title}" (${overlapping.startTime} - ${overlapping.endTime}).`);
+        setDraggedBlock(null);
+        return;
+      }
+      
+      setTemplate(prev => {
+        const copy = [...prev];
+        copy[originalIndex] = {
+          ...copy[originalIndex],
+          day: targetDay,
+          startTime: newStartStr,
+          endTime: newEndStr
+        };
+        return copy.sort((a, b) => a.startTime.localeCompare(b.startTime));
+      });
+    }
+    
+    setDraggedBlock(null);
+  };
+
+  const isBlockMatchingFilter = (b: TimeBlock | TemplateSlot) => {
+    const matchesText = !filterText.trim() || b.title.toLowerCase().includes(filterText.toLowerCase());
+    const matchesCategory = filterCategory === "ALL" || b.category === filterCategory;
+    return matchesText && matchesCategory;
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -1038,6 +1188,65 @@ export default function AgendaPage() {
         </div>
       )}
 
+      {view !== "month" && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-zinc-950/40 border border-white/5 rounded-2xl backdrop-blur-xl mt-2 select-none">
+          {/* Search Input */}
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Buscar actividad en el calendario..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-all font-semibold"
+            />
+            {filterText && (
+              <button 
+                onClick={() => setFilterText("")}
+                className="absolute right-3.5 top-2.5 text-[10px] font-bold text-zinc-500 hover:text-zinc-300"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          
+          {/* Category Buttons Filter */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500 mr-1.5 select-none">Filtrar por:</span>
+            <button
+              onClick={() => setFilterCategory("ALL")}
+              className={cn(
+                "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border transition-all active:scale-95",
+                filterCategory === "ALL"
+                  ? "bg-white/10 border-white/15 text-white"
+                  : "bg-black/20 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+              )}
+            >
+              Todas
+            </button>
+            {CATEGORIES.map(cat => {
+              const cfg = CATEGORY_CONFIG[cat];
+              const isSelected = filterCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setFilterCategory(cat)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border transition-all active:scale-95 flex items-center gap-1.5",
+                    isSelected
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                      : "bg-black/20 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                  )}
+                >
+                  <cfg.icon className="w-3 h-3 animate-pulse" />
+                  <span>{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {view === "week" && (
         <>
           {/* Week compliance bar */}
@@ -1083,18 +1292,18 @@ export default function AgendaPage() {
               </div>
 
               {/* Body: Hours column + Days grid */}
-              <div className="grid grid-cols-[60px_1fr] relative h-[864px]">
+              <div className="grid grid-cols-[60px_1fr] relative h-[1440px]">
                 {/* Background grid lines covering the entire width */}
                 <div className="absolute left-[60px] right-0 top-0 bottom-0 pointer-events-none select-none">
                   {Array.from({ length: 24 }).map((_, i) => (
-                    <div key={i} className="h-9 border-b border-white/[0.02]" />
+                    <div key={i} className="h-[60px] border-b border-white/[0.02]" />
                   ))}
                 </div>
 
                 {/* Left side: Hour labels */}
                 <div className="border-r border-white/5 flex flex-col select-none bg-black/10">
                   {Array.from({ length: 24 }).map((_, i) => (
-                    <div key={i} className="h-9 flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
+                    <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
                       {i.toString().padStart(2, "0")}:00
                     </div>
                   ))}
@@ -1107,14 +1316,44 @@ export default function AgendaPage() {
                     const isCurrentDay = currentWeekOffset === 0 && ((new Date()).getDay()===0?"SUN":getDayKey(new Date())) === day.key;
                     
                     return (
-                      <div key={day.key} className={cn("relative h-full w-full", isCurrentDay && "bg-amber-500/[0.005]")}>
+                      <div 
+                        key={day.key} 
+                        onClick={(e) => handleColumnClick(day.key, e)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDragEnter={(e) => { e.preventDefault(); setDraggedOverDay(day.key); }}
+                        onDragLeave={() => setDraggedOverDay(null)}
+                        onDrop={(e) => { setDraggedOverDay(null); handleDrop(e, day.key, "week"); }}
+                        className={cn(
+                          "relative h-full w-full transition-all duration-300 cursor-crosshair select-none", 
+                          isCurrentDay && "bg-amber-500/[0.005]",
+                          draggedOverDay === day.key && "bg-amber-500/[0.03] shadow-[inset_0_0_20px_rgba(245,158,11,0.05)] border-dashed border border-amber-500/20"
+                        )}
+                      >
+                        {/* Live Current Time Line Indicator */}
+                        {isCurrentDay && (
+                          <div 
+                            className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                            style={{ 
+                              top: `${((now.getHours() * 60 + now.getMinutes()) / 1440) * 100}%` 
+                            }}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.9)] -ml-1 border border-white/20 animate-pulse" />
+                            <div className="flex-1 h-[1.5px] bg-gradient-to-r from-red-500 to-transparent shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
+                          </div>
+                        )}
+
                         {dayBlocks.map((block, idx) => {
                           const cfg = CATEGORY_CONFIG[block.category as BlockCategory] || CATEGORY_CONFIG.PERSONAL;
                           const CategoryIcon = cfg.icon;
                           const isCompleted = isBlockCompleted(block as TimeBlock);
+                          const isMatching = isBlockMatchingFilter(block);
                           
                           const startMin = parseTimeToMinutes(block.startTime);
                           const endMin = block.endTime === "24:00" ? 24 * 60 : parseTimeToMinutes(block.endTime);
+                          const duration = endMin - startMin;
+                          const isShortBlock = duration <= 15;
+                          const isMediumBlock = duration > 15 && duration <= 35;
+
                           const topPercent = (startMin / 1440) * 100;
                           const heightPercent = ((endMin - startMin) / 1440) * 100;
 
@@ -1122,32 +1361,51 @@ export default function AgendaPage() {
                             <button
                               key={block.id || `${day.key}-${idx}`}
                               onClick={() => { setSelectedBlockForModal(block); setIsModalOpen(true); }}
+                              draggable={true}
+                              onDragStart={(e) => handleDragStart(e, block, "week")}
                               style={{ 
                                 top: `${topPercent}%`, 
                                 height: `${heightPercent}%`,
-                                left: "2px",
-                                right: "2px"
+                                left: "2.5px",
+                                right: "2.5px"
                               }}
                               className={cn(
-                                "absolute rounded-lg p-1.5 border-l-2 text-[9px] text-left group overflow-hidden border border-white/[0.02] flex flex-col justify-between hover:scale-[1.01] hover:z-10 transition-all shadow-[var(--shadow-sm)] active:scale-95",
+                                "absolute text-left group overflow-hidden border border-white/[0.03] flex flex-col hover:scale-[1.02] hover:shadow-xl hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing",
                                 cfg.border,
                                 cfg.bg,
-                                isCompleted && "opacity-45 grayscale"
+                                isCompleted && "opacity-45 grayscale",
+                                (!isMatching) && "opacity-15 blur-[0.3px] scale-95 pointer-events-none z-0",
+                                isShortBlock 
+                                  ? "rounded-md p-0 px-1 py-0.5 justify-center leading-none border-l-2" 
+                                  : isMediumBlock 
+                                    ? "rounded-lg p-1 py-0.5 px-1.5 justify-between leading-tight border-l-[3px]" 
+                                    : "rounded-xl p-2 justify-between leading-normal border-l-[3px]"
                               )}
                             >
                               <div className="flex flex-col truncate w-full">
-                                <span className="text-[7.5px] font-bold opacity-60 font-mono tracking-wide leading-none">{block.startTime}-{block.endTime}</span>
-                                <span className={cn("font-black text-white text-[9.5px] leading-tight truncate mt-0.5", isCompleted && "line-through opacity-70")}>
+                                {!isShortBlock && (
+                                  <span className="text-[7.5px] font-bold opacity-60 font-mono tracking-wide leading-none flex items-center gap-1">
+                                    <Clock className="w-2.5 h-2.5 shrink-0 text-zinc-400" />
+                                    {block.startTime} - {block.endTime}
+                                  </span>
+                                )}
+                                <span className={cn(
+                                  "font-black text-white leading-tight truncate group-hover:text-amber-400 transition-colors", 
+                                  isCompleted && "line-through opacity-70",
+                                  isShortBlock ? "text-[8px] mt-0" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
+                                )}>
                                   {block.title}
                                 </span>
                               </div>
                               
-                              <div className="flex items-center gap-1 mt-auto">
-                                <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
-                                <span className="text-[7px] font-black uppercase tracking-wider opacity-60 truncate leading-none capitalize">
-                                  {block.category.toLowerCase()}
-                                </span>
-                              </div>
+                              {!isShortBlock && !isMediumBlock && (
+                                <div className="flex items-center gap-1 mt-auto bg-black/20 px-1.5 py-0.5 rounded-md border border-white/5 w-fit max-w-full">
+                                  <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
+                                  <span className="text-[7px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
+                                    {block.category.toLowerCase()}
+                                  </span>
+                                </div>
+                              )}
                             </button>
                           );
                         })}
@@ -1269,18 +1527,18 @@ export default function AgendaPage() {
                 </div>
 
                 {/* Body: Hours column + Days grid */}
-                <div className="grid grid-cols-[60px_1fr] relative h-[864px]">
+                <div className="grid grid-cols-[60px_1fr] relative h-[1440px]">
                   {/* Background grid lines */}
                   <div className="absolute left-[60px] right-0 top-0 bottom-0 pointer-events-none select-none">
                     {Array.from({ length: 24 }).map((_, i) => (
-                      <div key={i} className="h-9 border-b border-white/[0.02]" />
+                      <div key={i} className="h-[60px] border-b border-white/[0.02]" />
                     ))}
                   </div>
 
                   {/* Hour labels */}
                   <div className="border-r border-white/5 flex flex-col select-none bg-black/10">
                     {Array.from({ length: 24 }).map((_, i) => (
-                      <div key={i} className="h-9 flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
+                      <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
                         {i.toString().padStart(2, "0")}:00
                       </div>
                     ))}
@@ -1292,13 +1550,29 @@ export default function AgendaPage() {
                       const daySlots = template.filter(b => b.day === day.key);
                       
                       return (
-                        <div key={day.key} className="relative h-full w-full">
+                        <div 
+                          key={day.key} 
+                          onClick={(e) => handleColumnClick(day.key, e)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDragEnter={(e) => { e.preventDefault(); setDraggedOverDay(day.key); }}
+                          onDragLeave={() => setDraggedOverDay(null)}
+                          onDrop={(e) => { setDraggedOverDay(null); handleDrop(e, day.key, "template"); }}
+                          className={cn(
+                            "relative h-full w-full transition-all duration-300 cursor-crosshair select-none", 
+                            draggedOverDay === day.key && "bg-amber-500/[0.03] shadow-[inset_0_0_20px_rgba(245,158,11,0.05)] border-dashed border border-amber-500/20"
+                          )}
+                        >
                           {daySlots.map((slot, idx) => {
                             const cfg = CATEGORY_CONFIG[slot.category as BlockCategory] || CATEGORY_CONFIG.PERSONAL;
                             const CategoryIcon = cfg.icon;
+                            const isMatching = isBlockMatchingFilter(slot);
                             
                             const startMin = parseTimeToMinutes(slot.startTime);
                             const endMin = slot.endTime === "24:00" ? 24 * 60 : parseTimeToMinutes(slot.endTime);
+                            const duration = endMin - startMin;
+                            const isShortBlock = duration <= 15;
+                            const isMediumBlock = duration > 15 && duration <= 35;
+
                             const topPercent = (startMin / 1440) * 100;
                             const heightPercent = ((endMin - startMin) / 1440) * 100;
 
@@ -1306,31 +1580,49 @@ export default function AgendaPage() {
                               <button
                                 key={`${day.key}-${idx}`}
                                 onClick={() => { setSelectedBlockForModal(slot); setIsModalOpen(true); }}
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, slot, "template")}
                                 style={{ 
                                   top: `${topPercent}%`, 
                                   height: `${heightPercent}%`,
-                                  left: "2px",
-                                  right: "2px"
+                                  left: "2.5px",
+                                  right: "2.5px"
                                 }}
                                 className={cn(
-                                  "absolute rounded-lg p-1.5 border-l-2 text-[9px] text-left group overflow-hidden border border-white/[0.02] flex flex-col justify-between hover:scale-[1.01] hover:z-10 transition-all shadow-[var(--shadow-sm)] active:scale-95",
+                                  "absolute text-left group overflow-hidden border border-white/[0.03] flex flex-col hover:scale-[1.02] hover:shadow-xl hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing",
                                   cfg.border,
-                                  cfg.bg
+                                  cfg.bg,
+                                  (!isMatching) && "opacity-15 blur-[0.3px] scale-95 pointer-events-none z-0",
+                                  isShortBlock 
+                                    ? "rounded-md p-0 px-1 py-0.5 justify-center leading-none border-l-2" 
+                                    : isMediumBlock 
+                                      ? "rounded-lg p-1 py-0.5 px-1.5 justify-between leading-tight border-l-[3px]" 
+                                      : "rounded-xl p-2 justify-between leading-normal border-l-[3px]"
                                 )}
                               >
                                 <div className="flex flex-col truncate w-full">
-                                  <span className="text-[7.5px] font-bold opacity-60 font-mono tracking-wide leading-none">{slot.startTime}-{slot.endTime}</span>
-                                  <span className="font-black text-white text-[9.5px] leading-tight truncate mt-0.5">
+                                  {!isShortBlock && (
+                                    <span className="text-[7.5px] font-bold opacity-60 font-mono tracking-wide leading-none flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5 shrink-0 text-zinc-400" />
+                                      {slot.startTime} - {slot.endTime}
+                                    </span>
+                                  )}
+                                  <span className={cn(
+                                    "font-black text-white leading-tight truncate group-hover:text-amber-400 transition-colors", 
+                                    isShortBlock ? "text-[8px] mt-0 tracking-tight leading-none" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
+                                  )}>
                                     {slot.title}
                                   </span>
                                 </div>
                                 
-                                <div className="flex items-center gap-1 mt-auto">
-                                  <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
-                                  <span className="text-[7px] font-black uppercase tracking-wider opacity-60 truncate leading-none capitalize">
-                                    {slot.category.toLowerCase()}
-                                  </span>
-                                </div>
+                                {!isShortBlock && !isMediumBlock && (
+                                  <div className="flex items-center gap-1 mt-auto bg-black/20 px-1.5 py-0.5 rounded-md border border-white/5 w-fit max-w-full">
+                                    <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
+                                    <span className="text-[7px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
+                                      {slot.category.toLowerCase()}
+                                    </span>
+                                  </div>
+                                )}
                               </button>
                             );
                           })}
