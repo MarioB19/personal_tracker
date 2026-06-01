@@ -444,17 +444,38 @@ function MonthCard({
             <div className="mt-4 space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Metas ({monthGoals.length})</p>
               <div className="space-y-1.5">
-                {monthGoals.map(g => (
-                  <div 
-                    key={g.id} 
-                    className="flex items-center gap-2.5 text-xs bg-black/40 hover:bg-black/80 px-2.5 py-2 rounded-xl border border-white/5 hover:border-white/10 group/goal cursor-pointer transition-all duration-200" 
-                    onClick={(e) => { e.stopPropagation(); onEditGoal(g); }}
-                  >
-                    <div className="size-1.5 rounded-full bg-gradient-to-tr from-primary to-orange-500 shrink-0" />
-                    <span className="flex-1 truncate text-zinc-300 font-medium group-hover/goal:text-white transition-colors">{g.name}</span>
-                    <span className="text-[10px] font-extrabold text-zinc-500 group-hover/goal:text-primary transition-colors">{g.progress}%</span>
-                  </div>
-                ))}
+                {monthGoals.map(g => {
+                  const isDone = g.progress >= 100;
+                  return (
+                    <div 
+                      key={g.id} 
+                      className={cn(
+                        "flex items-center gap-2.5 text-xs px-2.5 py-2 rounded-xl border cursor-pointer transition-all duration-300 group/goal",
+                        isDone
+                          ? "bg-emerald-950/30 border-emerald-500/30 hover:bg-emerald-950/50 hover:border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.1)]"
+                          : "bg-black/40 hover:bg-black/80 border-white/5 hover:border-white/10"
+                      )}
+                      onClick={(e) => { e.stopPropagation(); onEditGoal(g); }}
+                    >
+                      {isDone ? (
+                        <div className="size-3.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                          <Check className="size-2 text-emerald-400" />
+                        </div>
+                      ) : (
+                        <div className="size-1.5 rounded-full bg-gradient-to-tr from-primary to-orange-500 shrink-0" />
+                      )}
+                      <span className={cn(
+                        "flex-1 truncate font-medium transition-colors",
+                        isDone ? "text-emerald-200/80 line-through decoration-emerald-500/40" : "text-zinc-300 group-hover/goal:text-white"
+                      )}>{g.name}</span>
+                      <span className={cn(
+                        "text-[10px] font-extrabold transition-colors shrink-0",
+                        isDone ? "text-emerald-400" : "text-zinc-500 group-hover/goal:text-primary"
+                      )}>{g.progress}%</span>
+                    </div>
+                  );
+                })}
+
               </div>
             </div>
           )}
@@ -971,15 +992,17 @@ export default function HojaDeRutaPage() {
                                 </div>
 
                                 <div>
-                                  <div className="flex items-center gap-3">
-                                    <h3 className="text-sm font-black text-white tracking-tight uppercase">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-sm font-black text-white tracking-tight uppercase shrink-0">
                                       {q}
                                     </h3>
-                                    <span className="text-[10px] text-zinc-400 bg-white/5 border border-white/5 rounded-lg px-2 py-0.5 font-bold uppercase tracking-wider">
-                                      {QUARTER_MONTHS[q]
-                                        .map((m) => m.name)
-                                        .join(" · ")}
-                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {QUARTER_MONTHS[q].map((m, i) => (
+                                        <span key={m.num} className="text-[10px] text-zinc-400 bg-white/5 border border-white/5 rounded-lg px-2 py-0.5 font-bold uppercase tracking-wider whitespace-nowrap">
+                                          {m.name}
+                                        </span>
+                                      ))}
+                                    </div>
                                   </div>
                                   <div className="mt-2 flex items-center gap-3">
                                     <div className="w-24">
@@ -1023,37 +1046,41 @@ export default function HojaDeRutaPage() {
                                   </button>
                                 </div>
                                 {goals.filter(g => g.period === "QUARTERLY" && g.year === year && g.quarter === parseInt(q.replace('Q', ''))).length > 0 ? (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-2">
-                                    {goals.filter(g => g.period === "QUARTERLY" && g.year === year && g.quarter === parseInt(q.replace('Q', ''))).map(g => (
-                                       <div 
-                                         key={g.id} 
-                                         draggable={activeMoveGoalId !== g.id}
-                                         onDragStart={(e) => handleDragStart(e, g.id)}
-                                         onDragEnd={handleDragEnd}
-                                         className={cn(
-                                           "group/item relative flex flex-col items-stretch justify-center bg-[#0c0c0e]/80 hover:bg-[#121215] p-3.5 rounded-2xl border border-white/[0.04] hover:border-white/10 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 select-none",
-                                           activeMoveGoalId !== g.id && "cursor-grab active:cursor-grabbing",
-                                           draggedGoalId === g.id && "opacity-45 scale-95 border-dashed border-primary"
-                                         )} 
-                                         onClick={() => { 
-                                           if (activeMoveGoalId !== g.id) {
-                                             setEditingGoal(g); 
-                                             setShowGoalForm(true); 
-                                           }
-                                         }}
-                                       >
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+                                    {goals.filter(g => g.period === "QUARTERLY" && g.year === year && g.quarter === parseInt(q.replace('Q', ''))).map(g => {
+                                      const isDone = g.progress >= 100;
+                                      return (
+                                        <div
+                                          key={g.id}
+                                          draggable={!isDone && activeMoveGoalId !== g.id}
+                                          onDragStart={(e) => handleDragStart(e, g.id)}
+                                          onDragEnd={handleDragEnd}
+                                          className={cn(
+                                            "group/item overflow-hidden flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 select-none",
+                                            isDone
+                                              ? "bg-emerald-950/15 border-emerald-500/20"
+                                              : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04] hover:border-white/10 cursor-grab active:cursor-grabbing",
+                                            draggedGoalId === g.id && "opacity-40 scale-95"
+                                          )}
+                                          onClick={() => {
+                                            if (activeMoveGoalId !== g.id) {
+                                              setEditingGoal(g);
+                                              setShowGoalForm(true);
+                                            }
+                                          }}
+                                        >
                                           {activeMoveGoalId === g.id ? (
-                                            <div className="flex-1 flex flex-col gap-2 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                                               <div className="flex items-center justify-between">
-                                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Mover meta a:</span>
-                                                <button 
+                                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Mover a:</span>
+                                                <button
                                                   onClick={() => setActiveMoveGoalId(null)}
-                                                  className="text-zinc-500 hover:text-white text-[9px] font-black flex items-center gap-0.5"
+                                                  className="text-zinc-500 hover:text-white text-[9px] font-bold flex items-center gap-0.5"
                                                 >
                                                   <X className="size-3" /> Cancelar
                                                 </button>
                                               </div>
-                                              <div className="grid grid-cols-4 gap-1.5">
+                                              <div className="grid grid-cols-4 gap-1">
                                                 {QUARTERS.map((quarterKey) => {
                                                   const qNum = parseInt(quarterKey.replace('Q', ''));
                                                   const isCurrent = g.quarter === qNum;
@@ -1066,14 +1093,14 @@ export default function HojaDeRutaPage() {
                                                         setActiveMoveGoalId(null);
                                                       }}
                                                       className={cn(
-                                                        "px-1.5 py-1 rounded-lg text-center text-xs font-black transition-all cursor-pointer",
-                                                        isCurrent 
-                                                          ? "bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed"
+                                                        "py-1 rounded-lg text-center text-xs font-bold transition-all",
+                                                        isCurrent
+                                                          ? "bg-white/5 text-zinc-600 cursor-not-allowed"
                                                           : {
-                                                              Q1: "hover:bg-rose-500/20 hover:text-rose-300 text-rose-400 bg-rose-500/10 border border-rose-500/10",
-                                                              Q2: "hover:bg-emerald-500/20 hover:text-emerald-300 text-emerald-400 bg-emerald-500/10 border border-emerald-500/10",
-                                                              Q3: "hover:bg-sky-500/20 hover:text-sky-300 text-sky-400 bg-sky-500/10 border border-sky-500/10",
-                                                              Q4: "hover:bg-violet-500/20 hover:text-violet-300 text-violet-400 bg-violet-500/10 border border-violet-500/10",
+                                                              Q1: "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20",
+                                                              Q2: "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20",
+                                                              Q3: "bg-sky-500/10 text-sky-400 hover:bg-sky-500/20",
+                                                              Q4: "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20",
                                                             }[quarterKey]
                                                       )}
                                                     >
@@ -1084,42 +1111,59 @@ export default function HojaDeRutaPage() {
                                               </div>
                                             </div>
                                           ) : (
-                                            <div className="flex items-center gap-3 w-full">
-                                              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.05)]">
-                                                <Target className="size-4 text-amber-400" />
-                                              </div>
-                                              <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-zinc-100 group-hover/item:text-white truncate leading-snug tracking-tight text-sm">{g.name}</p>
-                                                <p className="text-[10px] font-extrabold text-amber-500 mt-1 font-mono tracking-wider">{g.progress}%</p>
-                                              </div>
-                                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                                {/* Quick Move Button */}
-                                                <button
-                                                  onClick={() => setActiveMoveGoalId(g.id)}
-                                                  className="p-1.5 rounded-lg text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
-                                                  title="Mover de trimestre"
-                                                >
-                                                  <ArrowRightLeft className="size-3.5" />
-                                                </button>
-
-                                                {/* Drag Handle (Desktop only) */}
-                                                <div className="p-1.5 rounded-lg text-zinc-600 group-hover/item:text-zinc-400 transition-all cursor-grab hidden sm:block" title="Arrastra para mover a otro trimestre">
-                                                  <Move className="size-3.5" />
+                                            <>
+                                              <div className="flex items-start gap-2 min-w-0">
+                                                <div className={cn(
+                                                  "flex size-5 shrink-0 items-center justify-center rounded-md mt-0.5",
+                                                  isDone ? "bg-emerald-500/15" : "bg-amber-500/10"
+                                                )}>
+                                                  {isDone
+                                                    ? <Check className="size-3 text-emerald-400" />
+                                                    : <Target className="size-3 text-amber-400" />
+                                                  }
                                                 </div>
-
-                                                {/* Delete button */}
-                                                <button 
-                                                   onClick={(e) => handleDeleteGoal(g.id, e)} 
-                                                   className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                                   title="Eliminar meta"
-                                                >
-                                                   <Trash className="size-3.5" />
-                                                </button>
+                                                <p className={cn(
+                                                  "flex-1 min-w-0 text-sm font-semibold leading-snug break-words",
+                                                  isDone ? "text-zinc-500 line-through decoration-zinc-600" : "text-zinc-200 group-hover/item:text-white"
+                                                )}>{g.name}</p>
                                               </div>
-                                            </div>
+                                              <div className="flex items-center justify-between gap-1">
+                                                <span className={cn(
+                                                  "text-[11px] font-bold font-mono tabular-nums shrink-0",
+                                                  isDone ? "text-emerald-500" : "text-amber-500"
+                                                )}>{g.progress}%</span>
+                                                <div
+                                                  className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  {!isDone && (
+                                                    <>
+                                                      <button
+                                                        onClick={() => setActiveMoveGoalId(g.id)}
+                                                        className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-all"
+                                                        title="Mover"
+                                                      >
+                                                        <ArrowRightLeft className="size-3" />
+                                                      </button>
+                                                      <div className="p-1 rounded-md text-zinc-700 hover:text-zinc-400 cursor-grab hidden sm:block">
+                                                        <Move className="size-3" />
+                                                      </div>
+                                                    </>
+                                                  )}
+                                                  <button
+                                                    onClick={(e) => handleDeleteGoal(g.id, e)}
+                                                    className="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                                    title="Eliminar"
+                                                  >
+                                                    <Trash className="size-3" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </>
                                           )}
                                         </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 ) : (
                                   <p className="text-xs text-zinc-500 italic mt-1 pl-1">
@@ -1127,6 +1171,7 @@ export default function HojaDeRutaPage() {
                                   </p>
                                 )}
                               </div>
+
                             )}
                           </div>
 
