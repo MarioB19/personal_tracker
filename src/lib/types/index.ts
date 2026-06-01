@@ -314,6 +314,21 @@ export interface RoadmapRow {
   updatedAt: Timestamp;
 }
 
+export interface SelfEvaluationDetail {
+  rating: number; // 1 a 5
+  comment: string; // Nota reflexiva
+}
+
+export interface SelfEvaluations {
+  yoFisico?: SelfEvaluationDetail;
+  yoProfesional?: SelfEvaluationDetail;
+  yoEmprendedor?: SelfEvaluationDetail;
+  yoMental?: SelfEvaluationDetail;
+  yoRelacional?: SelfEvaluationDetail;
+  yoEspiritual?: SelfEvaluationDetail;
+  yoProposito?: SelfEvaluationDetail;
+}
+
 export interface Review {
   id: string;
   userId: string;
@@ -327,6 +342,7 @@ export interface Review {
   adjustments: string[];
   nextFocus: string;
   overallRating: 1 | 2 | 3 | 4 | 5;
+  selfEvaluations?: SelfEvaluations;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

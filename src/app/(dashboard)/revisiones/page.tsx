@@ -3,25 +3,194 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, remove } from "@/lib/repositories/firestore";
-import { Review, ReviewType, ReviewMetric } from "@/lib/types";
-import { ClipboardCheck, Plus, X, Save, Trash2, ChevronDown, Star, Trophy, Brain, ShieldAlert, Wrench, Target } from "lucide-react";
+import { Review, ReviewType, SelfEvaluations, SelfEvaluationDetail } from "@/lib/types";
+import {
+  ClipboardCheck,
+  Plus,
+  X,
+  Save,
+  Trash2,
+  ChevronDown,
+  Star,
+  Trophy,
+  Brain,
+  ShieldAlert,
+  Wrench,
+  Target,
+  Dumbbell,
+  Briefcase,
+  Rocket,
+  Users,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Timestamp } from "firebase/firestore";
 
+// Options for WEEKLY, MONTHLY, and ANNUAL reviews
 const REVIEW_TYPES: { key: ReviewType; label: string }[] = [
   { key: "WEEKLY", label: "Semanal" },
-  { key: "BIWEEKLY", label: "Quincenal" },
   { key: "MONTHLY", label: "Mensual" },
-  { key: "QUARTERLY", label: "Trimestral" },
   { key: "ANNUAL", label: "Anual" },
 ];
+
+const TYPE_LABELS: Record<ReviewType, string> = {
+  WEEKLY: "Semanal",
+  MONTHLY: "Mensual",
+  ANNUAL: "Anual",
+  BIWEEKLY: "Quincenal",
+  QUARTERLY: "Trimestral",
+};
+
+function getReviewTypeBadgeClass(type: ReviewType) {
+  switch (type) {
+    case "WEEKLY":
+      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    case "MONTHLY":
+      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+    case "ANNUAL":
+      return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+    default:
+      return "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  }
+}
+
+const DIMENSIONS_CONFIG = [
+  {
+    key: "yoFisico" as const,
+    label: "Mi Yo Físico",
+    description: "Salud, alimentación, ejercicio y energía vital.",
+    icon: Dumbbell,
+    color: "emerald",
+    placeholder: "¿Cómo cuidaste tu cuerpo, alimentación y entrenamiento en este ciclo?..."
+  },
+  {
+    key: "yoProfesional" as const,
+    label: "Mi Yo Profesional",
+    description: "Carrera, desarrollo laboral y nuevas habilidades.",
+    icon: Briefcase,
+    color: "sky",
+    placeholder: "¿Qué avances tuviste en tu trabajo o aprendizaje profesional?..."
+  },
+  {
+    key: "yoEmprendedor" as const,
+    label: "Mi Yo Emprendedor",
+    description: "Proyectos propios, negocios y finanzas personales.",
+    icon: Rocket,
+    color: "violet",
+    placeholder: "¿Cómo progresaron tus proyectos, ideas de negocio y finanzas?..."
+  },
+  {
+    key: "yoMental" as const,
+    label: "Mi Yo Mental/Intelectual",
+    description: "Enfoque, paz mental, lecturas y desarrollo intelectual.",
+    icon: Brain,
+    color: "pink",
+    placeholder: "¿Cómo nutriste tu mente, tus lecturas y cuidaste tu paz mental?..."
+  },
+  {
+    key: "yoRelacional" as const,
+    label: "Mi Yo Relacional",
+    description: "Conexiones con familia, pareja, amigos y entorno.",
+    icon: Users,
+    color: "indigo",
+    placeholder: "¿Cómo cultivaste tus relaciones personales y afectivas?..."
+  },
+  {
+    key: "yoEspiritual" as const,
+    label: "Mi Yo Espiritual",
+    description: "Conexión interior, meditación, gratitud y presencia.",
+    icon: Sparkles,
+    color: "teal",
+    placeholder: "¿Cómo nutriste tu espíritu, momentos de silencio o gratitud?..."
+  },
+  {
+    key: "yoProposito" as const,
+    label: "Mi Yo Propósito",
+    description: "Dirección de vida, alineación de valores y legado.",
+    icon: Target,
+    color: "amber",
+    placeholder: "¿Qué tan alineado estuviste con tu propósito y metas de vida?..."
+  }
+];
+
+const COLOR_MAPS: Record<string, {
+  text: string;
+  bg: string;
+  border: string;
+  ring: string;
+  starActive: string;
+  bgHover: string;
+  glow: string;
+}> = {
+  emerald: {
+    text: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/20",
+    ring: "focus-within:border-emerald-500/40",
+    starActive: "text-emerald-400 fill-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]",
+    bgHover: "hover:bg-emerald-500/5",
+    glow: "shadow-[0_0_15px_rgba(52,211,153,0.03)]"
+  },
+  sky: {
+    text: "text-sky-400",
+    bg: "bg-sky-500/10",
+    border: "border-sky-500/20",
+    ring: "focus-within:border-sky-500/40",
+    starActive: "text-sky-400 fill-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.4)]",
+    bgHover: "hover:bg-sky-500/5",
+    glow: "shadow-[0_0_15px_rgba(56,189,248,0.03)]"
+  },
+  violet: {
+    text: "text-violet-400",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/20",
+    ring: "focus-within:border-violet-500/40",
+    starActive: "text-violet-400 fill-violet-400 drop-shadow-[0_0_8px_rgba(139,92,246,0.4)]",
+    bgHover: "hover:bg-violet-500/5",
+    glow: "shadow-[0_0_15px_rgba(139,92,246,0.03)]"
+  },
+  pink: {
+    text: "text-pink-400",
+    bg: "bg-pink-500/10",
+    border: "border-pink-500/20",
+    ring: "focus-within:border-pink-500/40",
+    starActive: "text-pink-400 fill-pink-400 drop-shadow-[0_0_8px_rgba(236,72,153,0.4)]",
+    bgHover: "hover:bg-pink-500/5",
+    glow: "shadow-[0_0_15px_rgba(236,72,153,0.03)]"
+  },
+  indigo: {
+    text: "text-indigo-400",
+    bg: "bg-indigo-500/10",
+    border: "border-indigo-500/20",
+    ring: "focus-within:border-indigo-500/40",
+    starActive: "text-indigo-400 fill-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]",
+    bgHover: "hover:bg-indigo-500/5",
+    glow: "shadow-[0_0_15px_rgba(99,102,241,0.03)]"
+  },
+  teal: {
+    text: "text-teal-400",
+    bg: "bg-teal-500/10",
+    border: "border-teal-500/20",
+    ring: "focus-within:border-teal-500/40",
+    starActive: "text-teal-400 fill-teal-400 drop-shadow-[0_0_8px_rgba(20,184,166,0.4)]",
+    bgHover: "hover:bg-teal-500/5",
+    glow: "shadow-[0_0_15px_rgba(20,184,166,0.03)]"
+  },
+  amber: {
+    text: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    ring: "focus-within:border-amber-500/40",
+    starActive: "text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.4)]",
+    bgHover: "hover:bg-amber-500/5",
+    glow: "shadow-[0_0_15px_rgba(245,158,11,0.03)]"
+  }
+};
 
 function generatePeriod(type: ReviewType): string {
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.toLocaleString("es-ES", { month: "short" });
   const monthFull = now.toLocaleString("es-ES", { month: "long" });
-  
+
   if (type === "WEEKLY") {
     const d = new Date(now);
     d.setHours(0, 0, 0, 0);
@@ -29,14 +198,8 @@ function generatePeriod(type: ReviewType): string {
     const week1 = new Date(d.getFullYear(), 0, 4);
     const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
     return `Semana ${weekNum} - ${year}`;
-  } else if (type === "BIWEEKLY") {
-    const isFirstHalf = now.getDate() <= 15;
-    return `${isFirstHalf ? "1ra" : "2da"} Quincena - ${month.charAt(0).toUpperCase() + month.slice(1)} ${year}`;
   } else if (type === "MONTHLY") {
     return `${monthFull.charAt(0).toUpperCase() + monthFull.slice(1)} ${year}`;
-  } else if (type === "QUARTERLY") {
-    const quarter = Math.floor(now.getMonth() / 3) + 1;
-    return `Q${quarter} - ${year}`;
   } else if (type === "ANNUAL") {
     return `${year}`;
   }
@@ -52,8 +215,9 @@ export default function RevisionesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>("ALL");
 
-  // Form
-  const [type, setType] = useState<ReviewType>("MONTHLY");
+  // Form State
+  const [formTab, setFormTab] = useState<"retro" | "dimensions">("retro");
+  const [type, setType] = useState<ReviewType>("WEEKLY");
   const [period, setPeriod] = useState("");
   const [achievements, setAchievements] = useState("");
   const [pendingItems, setPendingItems] = useState("");
@@ -61,15 +225,29 @@ export default function RevisionesPage() {
   const [learnings, setLearnings] = useState("");
   const [adjustments, setAdjustments] = useState("");
   const [nextFocus, setNextFocus] = useState("");
-  const [rating, setRating] = useState<1|2|3|4|5>(3);
+  const [rating, setRating] = useState<1 | 2 | 3 | 4 | 5>(3);
+
+  // Self evaluations initial state (7 selves)
+  const [selfEvaluations, setSelfEvaluations] = useState<Record<string, SelfEvaluationDetail>>({
+    yoFisico: { rating: 3, comment: "" },
+    yoProfesional: { rating: 3, comment: "" },
+    yoEmprendedor: { rating: 3, comment: "" },
+    yoMental: { rating: 3, comment: "" },
+    yoRelacional: { rating: 3, comment: "" },
+    yoEspiritual: { rating: 3, comment: "" },
+    yoProposito: { rating: 3, comment: "" },
+  });
 
   const loadData = useCallback(async () => {
     if (!uid) return;
     const r = await getAll<Review>(uid, "reviews");
-    setReviews(r); setLoading(false);
-  }, [user]);
+    setReviews(r);
+    setLoading(false);
+  }, [uid]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (showForm) {
@@ -79,10 +257,12 @@ export default function RevisionesPage() {
 
   const handleSave = async () => {
     if (!user || !period.trim()) return;
-    const splitLines = (text: string) => text.split("\n").filter(l => l.trim());
+    const splitLines = (text: string) => text.split("\n").filter((l) => l.trim());
     if (!uid) return;
+
     await create(uid, "reviews", {
-      type, period,
+      type,
+      period,
       achievements: splitLines(achievements),
       pendingItems: splitLines(pendingItems),
       blockers: splitLines(blockers),
@@ -91,10 +271,29 @@ export default function RevisionesPage() {
       adjustments: splitLines(adjustments),
       nextFocus,
       overallRating: rating,
+      selfEvaluations: selfEvaluations as SelfEvaluations,
     });
+
     setShowForm(false);
-    setType("MONTHLY"); setPeriod(""); setAchievements(""); setPendingItems("");
-    setBlockers(""); setLearnings(""); setAdjustments(""); setNextFocus(""); setRating(3);
+    setFormTab("retro");
+    setType("WEEKLY");
+    setPeriod("");
+    setAchievements("");
+    setPendingItems("");
+    setBlockers("");
+    setLearnings("");
+    setAdjustments("");
+    setNextFocus("");
+    setRating(3);
+    setSelfEvaluations({
+      yoFisico: { rating: 3, comment: "" },
+      yoProfesional: { rating: 3, comment: "" },
+      yoEmprendedor: { rating: 3, comment: "" },
+      yoMental: { rating: 3, comment: "" },
+      yoRelacional: { rating: 3, comment: "" },
+      yoEspiritual: { rating: 3, comment: "" },
+      yoProposito: { rating: 3, comment: "" },
+    });
     loadData();
   };
 
@@ -104,159 +303,681 @@ export default function RevisionesPage() {
     loadData();
   };
 
-  const filtered = reviews.filter(r => filterType === "ALL" || r.type === filterType);
+  const updateDimensionRating = (key: string, val: number) => {
+    setSelfEvaluations((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], rating: val },
+    }));
+  };
 
-  if (loading) return (
-    <div className="page-enter space-y-4">
-      <div className="h-8 w-48 bg-zinc-900 rounded animate-pulse" />
-      {[...Array(3)].map((_, i) => <div key={i} className="glass-card p-5 h-20 animate-pulse" />)}
-    </div>
-  );
+  const updateDimensionComment = (key: string, val: string) => {
+    setSelfEvaluations((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], comment: val },
+    }));
+  };
+
+  const filtered = reviews.filter((r) => filterType === "ALL" || r.type === filterType);
+
+  if (loading) {
+    return (
+      <div className="page-enter space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 w-40 bg-zinc-900 rounded animate-pulse" />
+            <div className="h-4 w-28 bg-zinc-900/50 rounded animate-pulse" />
+          </div>
+          <div className="h-10 w-36 bg-zinc-900 rounded animate-pulse" />
+        </div>
+        <div className="h-12 w-64 bg-zinc-900/55 rounded-lg animate-pulse" />
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="glass-card-static p-6 h-28 animate-pulse border-zinc-900/60" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="page-enter space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-amber-400" /> Revisiones
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <div className="p-1.5 bg-amber-500/10 rounded-lg text-amber-400">
+              <ClipboardCheck className="w-5.5 h-5.5" />
+            </div>
+            Revisiones
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">{reviews.length} revisiones registradas</p>
+          <p className="text-sm text-zinc-400 mt-1">
+            Mide tu progreso, ajusta tu rumbo y evalúa tus múltiples dimensiones.
+          </p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-1.5">
-          <Plus className="w-4 h-4" /> Nueva revisión
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className={cn(
+            "btn-primary flex items-center justify-center gap-2 px-5 py-2.5 font-semibold text-sm transition-all",
+            showForm && "bg-zinc-800 border-zinc-700/60 text-zinc-300 shadow-none hover:shadow-none brightness-90"
+          )}
+        >
+          {showForm ? (
+            <>
+              <X className="w-4 h-4" /> Cerrar formulario
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4" /> Nueva revisión
+            </>
+          )}
         </button>
       </div>
 
-      {/* Filter */}
-      <div className="flex gap-1 bg-zinc-900/50 p-1 rounded-lg border border-zinc-800 w-fit">
-        <button onClick={() => setFilterType("ALL")} className={cn("px-3.5 py-2 rounded-md text-sm transition-all", filterType === "ALL" ? "bg-amber-500/15 text-amber-400" : "text-zinc-500 hover:text-zinc-300")}>Todas</button>
-        {REVIEW_TYPES.map(rt => (
-          <button key={rt.key} onClick={() => setFilterType(rt.key)} className={cn("px-3.5 py-2 rounded-md text-sm transition-all", filterType === rt.key ? "bg-amber-500/15 text-amber-400" : "text-zinc-500 hover:text-zinc-300")}>{rt.label}</button>
-        ))}
-      </div>
+      {/* Filter / Apple style segmented control */}
+      {!showForm && (
+        <div className="flex bg-[#0d0d0d] p-1 rounded-xl border border-zinc-800/80 w-fit gap-1 shadow-inner">
+          <button
+            onClick={() => setFilterType("ALL")}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase cursor-pointer",
+              filterType === "ALL"
+                ? "bg-zinc-900 text-amber-400 shadow-sm border border-zinc-800/50"
+                : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            Todas
+          </button>
+          {REVIEW_TYPES.map((rt) => (
+            <button
+              key={rt.key}
+              onClick={() => setFilterType(rt.key)}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase cursor-pointer",
+                filterType === rt.key
+                  ? "bg-zinc-900 text-amber-400 shadow-sm border border-zinc-800/50"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              {rt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
+      {/* Form Card */}
       {showForm && (
-        <div className="glass-card overflow-hidden">
-          {/* Header / Context */}
-          <div className="bg-zinc-900/50 p-6 border-b border-zinc-800/50 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-            <div>
-              <h3 className="text-base font-semibold text-white mb-2">Nueva revisión</h3>
-              <div className="flex items-center gap-3">
-                <select value={type} onChange={(e) => setType(e.target.value as ReviewType)} className="px-3 py-1.5 bg-black/40 border border-zinc-800 rounded-lg text-sm text-amber-400 font-medium outline-none focus:border-amber-500/50">
-                  {REVIEW_TYPES.map(rt => <option key={rt.key} value={rt.key}>{rt.label}</option>)}
+        <div className="glass-card border-zinc-800/80 overflow-hidden shadow-2xl relative">
+          {/* Form Header Context */}
+          <div className="bg-[#0b0b0b] p-6 border-b border-zinc-800/60 flex flex-col lg:flex-row gap-6 justify-between lg:items-center">
+            <div className="space-y-3">
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">
+                Creando Registro
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value as ReviewType)}
+                  className="px-3.5 py-2 bg-[#121212] border border-zinc-800 rounded-xl text-sm text-amber-400 font-semibold outline-none focus:border-amber-500/50 transition-colors"
+                >
+                  {REVIEW_TYPES.map((rt) => (
+                    <option key={rt.key} value={rt.key}>
+                      {rt.label}
+                    </option>
+                  ))}
                 </select>
-                <input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="Ej: Marzo 2026" className="w-60 px-3 py-1.5 bg-black/40 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-amber-500/50" />
+                <input
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  placeholder="Ej: Semana 23 - 2026"
+                  className="w-64 px-3.5 py-2 bg-[#121212] border border-zinc-800 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-amber-500/50 transition-colors"
+                />
               </div>
             </div>
-            <div>
-              <p className="text-xs text-zinc-400 mb-1.5 text-left sm:text-right">Calificación general</p>
-              <div className="flex gap-1.5 bg-black/20 p-2 rounded-xl border border-zinc-800/50 w-fit">
-                {([1,2,3,4,5] as const).map(s => (
-                  <button key={s} onClick={() => setRating(s)} className="transition-all hover:scale-110 active:scale-95">
-                    <Star className={cn("w-6 h-6", s <= rating ? "text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]" : "text-zinc-700")} />
+
+            <div className="bg-[#121212] p-4 rounded-2xl border border-zinc-800/60 flex flex-col justify-center min-w-[200px]">
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-2 text-center lg:text-left">
+                Evaluación General del Ciclo
+              </p>
+              <div className="flex gap-2 justify-center lg:justify-start">
+                {([1, 2, 3, 4, 5] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setRating(s)}
+                    className="transition-all hover:scale-115 active:scale-95 cursor-pointer"
+                  >
+                    <Star
+                      className={cn(
+                        "w-7 h-7 transition-all duration-300",
+                        s <= rating
+                          ? "text-amber-400 fill-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]"
+                          : "text-zinc-800"
+                      )}
+                    />
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Body / Textareas */}
-          <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* Col 1: Retrospectiva (Positive/Neutral) */}
-            <div className="space-y-6">
-              <h4 className="text-sm font-medium text-zinc-100 flex items-center gap-2 border-b border-zinc-800/50 pb-2">
-                 Retrospectiva
-              </h4>
-              
-              <div className="group block">
-                <label className="flex items-center gap-2 text-xs text-emerald-400 mb-1.5 font-medium"><Trophy className="w-3.5 h-3.5" /> Logros</label>
-                <textarea value={achievements} onChange={(e) => setAchievements(e.target.value)} rows={4} placeholder="¿Qué salió bien? Un logro por línea..." className="w-full px-3 py-2 bg-zinc-900/30 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 resize-none outline-none focus:bg-zinc-900/80 focus:border-emerald-500/40 transition-all group-focus-within:shadow-[0_0_15px_rgba(52,211,153,0.05)]" />
-              </div>
-              
-              <div className="group block">
-                <label className="flex items-center gap-2 text-xs text-blue-400 mb-1.5 font-medium"><Brain className="w-3.5 h-3.5" /> Aprendizajes</label>
-                <textarea value={learnings} onChange={(e) => setLearnings(e.target.value)} rows={4} placeholder="¿Qué aprendiste en este ciclo?..." className="w-full px-3 py-2 bg-zinc-900/30 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 resize-none outline-none focus:bg-zinc-900/80 focus:border-blue-500/40 transition-all group-focus-within:shadow-[0_0_15px_rgba(96,165,250,0.05)]" />
-              </div>
-            </div>
-
-            {/* Col 2: Áreas de Oportunidad y Futuro */}
-            <div className="space-y-6">
-              <h4 className="text-sm font-medium text-zinc-100 flex items-center gap-2 border-b border-zinc-800/50 pb-2">
-                 Áreas de Oportunidad & Futuro
-              </h4>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="group block">
-                  <label className="flex items-center gap-2 text-xs text-orange-400 mb-1.5 font-medium"><ShieldAlert className="w-3.5 h-3.5" /> Bloqueadores</label>
-                  <textarea value={blockers} onChange={(e) => setBlockers(e.target.value)} rows={3} placeholder="¿Qué te detuvo?..." className="w-full px-3 py-2 bg-zinc-900/30 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 resize-none outline-none focus:bg-zinc-900/80 focus:border-orange-500/40 transition-all group-focus-within:shadow-[0_0_15px_rgba(249,115,22,0.05)]" />
-                </div>
-                <div className="group block">
-                  <label className="flex items-center gap-2 text-xs text-purple-400 mb-1.5 font-medium"><Wrench className="w-3.5 h-3.5" /> Ajustes</label>
-                  <textarea value={adjustments} onChange={(e) => setAdjustments(e.target.value)} rows={3} placeholder="¿Qué vas a cambiar?..." className="w-full px-3 py-2 bg-zinc-900/30 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 resize-none outline-none focus:bg-zinc-900/80 focus:border-purple-500/40 transition-all group-focus-within:shadow-[0_0_15px_rgba(168,85,247,0.05)]" />
-                </div>
-              </div>
-              
-              <div className="group block">
-                <label className="flex items-center gap-2 text-xs text-zinc-400 mb-1.5 font-medium">⏳ Pendientes</label>
-                <textarea value={pendingItems} onChange={(e) => setPendingItems(e.target.value)} rows={2} placeholder="Tareas que se pasaron al siguiente ciclo..." className="w-full px-3 py-2 bg-zinc-900/30 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 resize-none outline-none focus:bg-zinc-900/80 focus:border-zinc-500/40 transition-all" />
-              </div>
-
-              <div className="group block">
-                <label className="flex items-center gap-2 text-xs text-amber-400 mb-1.5 font-medium"><Target className="w-3.5 h-3.5" /> Siguiente Enfoque</label>
-                <input value={nextFocus} onChange={(e) => setNextFocus(e.target.value)} placeholder="El objetivo principal del próximo ciclo..." className="w-full px-3 py-2.5 bg-amber-500/5 border border-amber-500/20 rounded-lg text-sm text-amber-100 placeholder:text-amber-500/40 outline-none focus:bg-amber-500/10 focus:border-amber-500/50 transition-all focus:shadow-[0_0_15px_rgba(251,191,36,0.1)]" />
-              </div>
-            </div>
-            
+          {/* Form Tabs Nav */}
+          <div className="flex border-b border-zinc-800/40 bg-[#070707] px-4 py-2">
+            <button
+              onClick={() => setFormTab("retro")}
+              className={cn(
+                "flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border border-transparent cursor-pointer",
+                formTab === "retro"
+                  ? "bg-zinc-900/80 text-white border-zinc-800/60 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <ClipboardCheck className="w-4 h-4 text-zinc-400" />
+              1. Retrospectiva General
+            </button>
+            <button
+              onClick={() => setFormTab("dimensions")}
+              className={cn(
+                "flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border border-transparent cursor-pointer",
+                formTab === "dimensions"
+                  ? "bg-zinc-900/80 text-white border-zinc-800/60 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              <Sparkles className="w-4 h-4 text-zinc-400" />
+              2. Mis 7 Dimensiones (Yo)
+            </button>
           </div>
 
-          {/* Footer */}
-          <div className="bg-zinc-900/50 p-4 border-t border-zinc-800/50 flex justify-end gap-3">
-            <button onClick={() => setShowForm(false)} className="btn-secondary px-5">Cancelar</button>
-            <button onClick={handleSave} disabled={!period.trim()} className="btn-primary px-6 disabled:opacity-50 font-medium">
-              <Save className="w-4 h-4 inline mr-1.5" /> Guardar
+          {/* Tab Content */}
+          <div className="p-6 bg-[#050505]/45">
+            {formTab === "retro" ? (
+              /* TAB 1: Retrospective Forms */
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Column 1: Retrospectiva */}
+                <div className="space-y-6">
+                  <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-2 border-b border-zinc-800/50 pb-2.5">
+                    Logros & Aprendizajes
+                  </h4>
+
+                  <div className="group block">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2">
+                      <Trophy className="w-4 h-4" /> Logros del ciclo
+                    </label>
+                    <textarea
+                      value={achievements}
+                      onChange={(e) => setAchievements(e.target.value)}
+                      rows={5}
+                      placeholder="¿Qué salió bien? Un logro importante por línea..."
+                      className="w-full px-4 py-3 bg-[#0d0d0d] border border-zinc-800/80 rounded-xl text-sm text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/40 focus:border-emerald-500/45 transition-all focus:shadow-[0_0_15px_rgba(52,211,153,0.03)]"
+                    />
+                  </div>
+
+                  <div className="group block">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-400 mb-2">
+                      <Brain className="w-4 h-4" /> Aprendizajes clave
+                    </label>
+                    <textarea
+                      value={learnings}
+                      onChange={(e) => setLearnings(e.target.value)}
+                      rows={5}
+                      placeholder="¿Qué aprendiste en este ciclo de tus errores o éxitos?..."
+                      className="w-full px-4 py-3 bg-[#0d0d0d] border border-zinc-800/80 rounded-xl text-sm text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/40 focus:border-sky-500/45 transition-all focus:shadow-[0_0_15px_rgba(56,189,248,0.03)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: Oportunidades y Enfoque */}
+                <div className="space-y-6">
+                  <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-2 border-b border-zinc-800/50 pb-2.5">
+                    Obstáculos & Futuro
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="group block">
+                      <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-400 mb-2">
+                        <ShieldAlert className="w-4 h-4" /> Bloqueadores
+                      </label>
+                      <textarea
+                        value={blockers}
+                        onChange={(e) => setBlockers(e.target.value)}
+                        rows={4}
+                        placeholder="¿Qué frenó tu progreso?..."
+                        className="w-full px-4 py-3 bg-[#0d0d0d] border border-zinc-800/80 rounded-xl text-sm text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/40 focus:border-orange-500/45 transition-all focus:shadow-[0_0_15px_rgba(249,115,22,0.03)]"
+                      />
+                    </div>
+                    <div className="group block">
+                      <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-400 mb-2">
+                        <Wrench className="w-4 h-4" /> Ajustes necesarios
+                      </label>
+                      <textarea
+                        value={adjustments}
+                        onChange={(e) => setAdjustments(e.target.value)}
+                        rows={4}
+                        placeholder="¿Qué cambios harás en el siguiente ciclo?..."
+                        className="w-full px-4 py-3 bg-[#0d0d0d] border border-zinc-800/80 rounded-xl text-sm text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/40 focus:border-purple-500/45 transition-all focus:shadow-[0_0_15px_rgba(168,85,247,0.03)]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="group block">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                      ⏳ Pendientes de arrastre
+                    </label>
+                    <textarea
+                      value={pendingItems}
+                      onChange={(e) => setPendingItems(e.target.value)}
+                      rows={3}
+                      placeholder="Tareas que quedaron inconclusas y se trasladan..."
+                      className="w-full px-4 py-3 bg-[#0d0d0d] border border-zinc-800/80 rounded-xl text-sm text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/40 focus:border-zinc-700 transition-all"
+                    />
+                  </div>
+
+                  <div className="group block">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-2">
+                      <Target className="w-4 h-4" /> Enfoque principal del próximo ciclo
+                    </label>
+                    <input
+                      value={nextFocus}
+                      onChange={(e) => setNextFocus(e.target.value)}
+                      placeholder="El objetivo crucial a lograr en la siguiente semana/mes..."
+                      className="w-full px-4 py-3 bg-amber-500/[0.03] border border-amber-500/25 rounded-xl text-sm text-amber-100 placeholder:text-amber-500/30 outline-none focus:bg-amber-500/[0.06] focus:border-amber-500/50 transition-all focus:shadow-[0_0_15px_rgba(251,191,36,0.08)]"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* TAB 2: 7 Selves Grid */
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-zinc-800/45 pb-3.5">
+                  <div>
+                    <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400">
+                      Evaluación por Dimensión Personal
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      Asigna un puntaje y escribe una breve reflexión de tu desempeño en cada uno de tus 7 "Yo".
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-400/80 px-2 py-0.5 bg-amber-500/5 rounded-md border border-amber-500/10">
+                    7 Dimensiones
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {DIMENSIONS_CONFIG.map((dim) => {
+                    const cfg = COLOR_MAPS[dim.color];
+                    const state = selfEvaluations[dim.key] || { rating: 3, comment: "" };
+                    const IconComp = dim.icon;
+
+                    return (
+                      <div
+                        key={dim.key}
+                        className={cn(
+                          "bg-[#090909]/60 border border-zinc-800/80 rounded-2xl p-5 transition-all duration-300",
+                          "focus-within:border-zinc-700/60 focus-within:bg-[#0b0b0b]",
+                          cfg.glow
+                        )}
+                      >
+                        {/* Dim header */}
+                        <div className="flex items-start gap-3.5 mb-4">
+                          <div className={cn("p-2.5 rounded-xl", cfg.bg, cfg.text)}>
+                            <IconComp className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h5 className="text-sm font-bold text-zinc-100 tracking-wide">
+                              {dim.label}
+                            </h5>
+                            <p className="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">
+                              {dim.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Stars selector with custom coloring */}
+                        <div className="mb-4">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                            Tu puntuación
+                          </p>
+                          <div className="flex gap-1.5">
+                            {[1, 2, 3, 4, 5].map((val) => (
+                              <button
+                                key={val}
+                                onClick={() => updateDimensionRating(dim.key, val)}
+                                className="transition-all hover:scale-120 active:scale-90 cursor-pointer"
+                              >
+                                <Star
+                                  className={cn(
+                                    "w-5 h-5 transition-all duration-300",
+                                    val <= state.rating ? cfg.starActive : "text-zinc-800"
+                                  )}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Comment text box */}
+                        <div className="group block">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                            Reflexión / Notas
+                          </p>
+                          <textarea
+                            value={state.comment}
+                            onChange={(e) => updateDimensionComment(dim.key, e.target.value)}
+                            rows={3}
+                            placeholder={dim.placeholder}
+                            className="w-full px-3 py-2 bg-[#0c0c0c] border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-700 resize-none outline-none focus:bg-zinc-900/30 focus:border-zinc-700 transition-all"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Form Footer */}
+          <div className="bg-[#0b0b0b] p-5 border-t border-zinc-800/60 flex justify-end gap-3.5">
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setFormTab("retro");
+              }}
+              className="btn-secondary px-5 py-2 text-sm font-semibold rounded-xl"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!period.trim()}
+              className="btn-primary px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 disabled:opacity-40"
+            >
+              <Save className="w-4 h-4" /> Guardar revisión
             </button>
           </div>
         </div>
       )}
 
-      {filtered.length > 0 ? (
-        <div className="space-y-3">
-          {filtered.map(r => {
+      {/* Review List */}
+      {!showForm && filtered.length > 0 ? (
+        <div className="space-y-4">
+          {filtered.map((r) => {
             const isExpanded = expandedId === r.id;
             return (
-              <div key={r.id} className="glass-card p-4">
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : r.id)}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs bg-amber-500/15 text-amber-400 px-2.5 py-1 rounded">{r.type}</span>
-                    <h3 className="text-sm font-medium text-zinc-100">{r.period}</h3>
-                    <div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={cn("w-3 h-3", s <= r.overallRating ? "text-amber-400 fill-amber-400" : "text-zinc-800")} />)}</div>
+              <div
+                key={r.id}
+                className={cn(
+                  "glass-card p-5 border-zinc-800/80 transition-all duration-300",
+                  isExpanded && "shadow-2xl border-zinc-700/40 bg-[#090909]/40"
+                )}
+              >
+                {/* Collapsed Header Bar */}
+                <div
+                  className="flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
+                  onClick={() => setExpandedId(isExpanded ? null : r.id)}
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span
+                        className={cn(
+                          "text-[9px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded border",
+                          getReviewTypeBadgeClass(r.type)
+                        )}
+                      >
+                        {TYPE_LABELS[r.type] || r.type}
+                      </span>
+                      <h3 className="text-sm font-bold text-zinc-100 tracking-wide">{r.period}</h3>
+                      <div className="flex bg-[#0f0f0f] border border-zinc-800/60 p-1.5 rounded-lg gap-0.5 shadow-inner">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star
+                            key={s}
+                            className={cn(
+                              "w-3.5 h-3.5",
+                              s <= r.overallRating
+                                ? "text-amber-400 fill-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.4)]"
+                                : "text-zinc-800"
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Compact preview of the 7 Dimension evaluations (Only if present in data) */}
+                    {r.selfEvaluations && (
+                      <div className="flex flex-wrap gap-2.5 pt-1">
+                        {DIMENSIONS_CONFIG.map((dim) => {
+                          const detail = r.selfEvaluations?.[dim.key];
+                          if (!detail || !detail.rating) return null;
+                          const cfg = COLOR_MAPS[dim.color];
+                          const IconComp = dim.icon;
+
+                          return (
+                            <div
+                              key={dim.key}
+                              className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border",
+                                cfg.bg,
+                                cfg.text,
+                                cfg.border
+                              )}
+                              title={`${dim.label}: ${detail.rating}⭐`}
+                            >
+                              <IconComp className="w-3 h-3" />
+                              <span>{detail.rating}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }} className="text-zinc-700 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
-                    <ChevronDown className={cn("w-4 h-4 text-zinc-500 transition-transform", isExpanded && "rotate-180")} />
+
+                  <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-zinc-900 pt-3 md:pt-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(r.id);
+                      }}
+                      className="p-2 text-zinc-700 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                      title="Eliminar revisión"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                      <span>Ver detalles</span>
+                      <ChevronDown
+                        className={cn(
+                          "w-4 h-4 text-zinc-500 transition-transform duration-300",
+                          isExpanded && "rotate-180 text-amber-400"
+                        )}
+                      />
+                    </div>
                   </div>
                 </div>
+
+                {/* Expanded Detailed Panel */}
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-zinc-800/50 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    {r.achievements?.length > 0 && <div><h4 className="text-zinc-400 font-medium mb-1">✅ Logros</h4><ul className="space-y-0.5 text-zinc-300">{r.achievements.map((a, i) => <li key={i}>• {a}</li>)}</ul></div>}
-                    {r.pendingItems?.length > 0 && <div><h4 className="text-zinc-400 font-medium mb-1">⏳ Pendientes</h4><ul className="space-y-0.5 text-zinc-300">{r.pendingItems.map((p, i) => <li key={i}>• {p}</li>)}</ul></div>}
-                    {r.blockers?.length > 0 && <div><h4 className="text-zinc-400 font-medium mb-1">🚧 Bloqueadores</h4><ul className="space-y-0.5 text-zinc-300">{r.blockers.map((b, i) => <li key={i}>• {b}</li>)}</ul></div>}
-                    {r.learnings?.length > 0 && <div><h4 className="text-zinc-400 font-medium mb-1">💡 Aprendizajes</h4><ul className="space-y-0.5 text-zinc-300">{r.learnings.map((l, i) => <li key={i}>• {l}</li>)}</ul></div>}
-                    {r.adjustments?.length > 0 && <div><h4 className="text-zinc-400 font-medium mb-1">🔧 Ajustes</h4><ul className="space-y-0.5 text-zinc-300">{r.adjustments.map((a, i) => <li key={i}>• {a}</li>)}</ul></div>}
-                    {r.nextFocus && <div><h4 className="text-zinc-400 font-medium mb-1">🎯 Siguiente enfoque</h4><p className="text-zinc-300">{r.nextFocus}</p></div>}
+                  <div className="mt-6 pt-6 border-t border-zinc-800/60 space-y-8 animate-in fade-in slide-in duration-300">
+                    {/* Retrospective section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Left Column: Positive things */}
+                      <div className="space-y-4">
+                        {r.achievements?.length > 0 && (
+                          <div className="bg-emerald-950/[0.06] border border-emerald-950/20 rounded-xl p-4.5">
+                            <h4 className="text-xs uppercase font-bold tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5">
+                              <Trophy className="w-4 h-4" /> ✅ Logros del ciclo
+                            </h4>
+                            <ul className="space-y-2 text-xs text-zinc-300">
+                              {r.achievements.map((a, i) => (
+                                <li key={i} className="flex items-start gap-2 leading-relaxed">
+                                  <span className="text-emerald-500/80 font-bold">•</span>
+                                  <span>{a}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {r.learnings?.length > 0 && (
+                          <div className="bg-sky-950/[0.06] border border-sky-950/20 rounded-xl p-4.5">
+                            <h4 className="text-xs uppercase font-bold tracking-wider text-sky-400 flex items-center gap-2 mb-2.5">
+                              <Brain className="w-4 h-4" /> 💡 Aprendizajes
+                            </h4>
+                            <ul className="space-y-2 text-xs text-zinc-300">
+                              {r.learnings.map((l, i) => (
+                                <li key={i} className="flex items-start gap-2 leading-relaxed">
+                                  <span className="text-sky-500/80 font-bold">•</span>
+                                  <span>{l}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Column: Areas for improvement */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {r.blockers?.length > 0 && (
+                            <div className="bg-orange-950/[0.06] border border-orange-950/20 rounded-xl p-4.5">
+                              <h4 className="text-xs uppercase font-bold tracking-wider text-orange-400 flex items-center gap-2 mb-2">
+                                <ShieldAlert className="w-3.5 h-3.5" /> 🚧 Bloqueadores
+                              </h4>
+                              <ul className="space-y-1.5 text-xs text-zinc-300">
+                                {r.blockers.map((b, i) => (
+                                  <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                                    <span className="text-orange-500/80">•</span>
+                                    <span>{b}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {r.adjustments?.length > 0 && (
+                            <div className="bg-purple-950/[0.06] border border-purple-950/20 rounded-xl p-4.5">
+                              <h4 className="text-xs uppercase font-bold tracking-wider text-purple-400 flex items-center gap-2 mb-2">
+                                <Wrench className="w-3.5 h-3.5" /> 🔧 Ajustes
+                              </h4>
+                              <ul className="space-y-1.5 text-xs text-zinc-300">
+                                {r.adjustments.map((a, i) => (
+                                  <li key={i} className="flex items-start gap-1.5 leading-relaxed">
+                                    <span className="text-purple-500/80">•</span>
+                                    <span>{a}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {r.pendingItems?.length > 0 && (
+                          <div className="bg-zinc-950/[0.2] border border-zinc-800/80 rounded-xl p-4.5">
+                            <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 mb-2">
+                              ⏳ Pendientes del ciclo
+                            </h4>
+                            <ul className="space-y-1.5 text-xs text-zinc-300">
+                              {r.pendingItems.map((p, i) => (
+                                <li key={i} className="flex items-start gap-2 leading-relaxed">
+                                  <span className="text-zinc-600 font-bold">•</span>
+                                  <span>{p}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {r.nextFocus && (
+                          <div className="bg-amber-500/[0.02] border border-amber-500/15 rounded-xl p-4.5">
+                            <h4 className="text-xs uppercase font-bold tracking-wider text-amber-400 flex items-center gap-2 mb-1.5">
+                              <Target className="w-4 h-4" /> Objetivo de Enfoque Próximo
+                            </h4>
+                            <p className="text-xs font-semibold text-amber-100/90 pl-6 leading-relaxed">
+                              {r.nextFocus}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detailed Dimensions self evaluations */}
+                    {r.selfEvaluations && (
+                      <div className="space-y-4 pt-2">
+                        <div className="border-b border-zinc-800/60 pb-2">
+                          <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-amber-400" />
+                            Reflexión Detallada de las 7 Dimensiones
+                          </h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {DIMENSIONS_CONFIG.map((dim) => {
+                            const detail = r.selfEvaluations?.[dim.key];
+                            if (!detail) return null;
+                            const cfg = COLOR_MAPS[dim.color];
+                            const IconComp = dim.icon;
+
+                            return (
+                              <div
+                                key={dim.key}
+                                className={cn(
+                                  "bg-[#090909]/45 border border-zinc-800/60 rounded-xl p-4 space-y-3"
+                                )}
+                              >
+                                <div className="flex items-center justify-between border-b border-zinc-800/40 pb-2">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={cn("p-1.5 rounded-lg", cfg.bg, cfg.text)}>
+                                      <IconComp className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-bold text-zinc-200">
+                                      {dim.label}
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-0.5">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <Star
+                                        key={star}
+                                        className={cn(
+                                          "w-3 h-3",
+                                          star <= detail.rating ? cfg.starActive : "text-zinc-800"
+                                        )}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <p className="text-xs text-zinc-300 leading-relaxed italic bg-black/10 p-2.5 rounded-lg border border-zinc-900 min-h-[50px]">
+                                  {detail.comment.trim() ? (
+                                    `"${detail.comment}"`
+                                  ) : (
+                                    <span className="text-zinc-600 font-medium not-italic">
+                                      Sin reflexión registrada en este ciclo.
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-      ) : !showForm && (
-        <div className="text-center py-16">
-          <ClipboardCheck className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
-          <h3 className="text-sm font-medium text-zinc-300 mb-1">Sin revisiones</h3>
-          <button onClick={() => setShowForm(true)} className="btn-primary mt-3">Crear primera revisión</button>
-        </div>
+      ) : (
+        !showForm && (
+          <div className="text-center py-20 bg-[#080808]/40 border border-zinc-800/60 rounded-2xl shadow-sm max-w-xl mx-auto mt-6">
+            <ClipboardCheck className="w-14 h-14 text-zinc-700 mx-auto mb-4" />
+            <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-2">
+              Sin revisiones
+            </h3>
+            <p className="text-xs text-zinc-500 max-w-xs mx-auto mb-5 leading-relaxed">
+              Comienza registrando tu primera evaluación de la semana o el mes para dar seguimiento a tu crecimiento.
+            </p>
+            <button onClick={() => setShowForm(true)} className="btn-primary px-5 py-2.5 rounded-xl font-semibold">
+              Crear tu primera revisión
+            </button>
+          </div>
+        )
       )}
     </div>
   );
