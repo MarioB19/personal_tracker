@@ -22,8 +22,23 @@ import {
   Rocket,
   Users,
   Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ArrowRight,
+  Calendar,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 // Options for WEEKLY, MONTHLY, and ANNUAL reviews
 const REVIEW_TYPES: { key: ReviewType; label: string }[] = [
@@ -239,6 +254,7 @@ export default function RevisionesPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>("ALL");
+  const [viewMode, setViewMode] = useState<"history" | "dashboard">("history");
 
   // Form State
   const [formTab, setFormTab] = useState<"retro" | "dimensions">("retro");
@@ -266,6 +282,121 @@ export default function RevisionesPage() {
   const calculatedLiveRating = useMemo(() => {
     return calculateReviewRating(rating, selfEvaluations as SelfEvaluations);
   }, [rating, selfEvaluations]);
+
+  const monthlyMetrics = useMemo(() => {
+    const monthlyDataMap: Record<string, {
+      monthKey: string;
+      monthLabel: string;
+      reviewsCount: number;
+      overallSum: number;
+      dimensionsSums: Record<string, number>;
+      dimensionsCounts: Record<string, number>;
+    }> = {};
+
+    reviews.forEach((r) => {
+      if (!r.createdAt) return;
+      let date: Date;
+      try {
+        date = r.createdAt.toDate();
+      } catch {
+        return;
+      }
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+      
+      const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+      const monthLabel = `${monthNamesShort[month]} ${year}`;
+
+      if (!monthlyDataMap[monthKey]) {
+        monthlyDataMap[monthKey] = {
+          monthKey,
+          monthLabel,
+          reviewsCount: 0,
+          overallSum: 0,
+          dimensionsSums: {
+            yoFisico: 0,
+            yoProfesional: 0,
+            yoEmprendedor: 0,
+            yoMental: 0,
+            yoRelacional: 0,
+            yoEspiritual: 0,
+            yoProposito: 0,
+          },
+          dimensionsCounts: {
+            yoFisico: 0,
+            yoProfesional: 0,
+            yoEmprendedor: 0,
+            yoMental: 0,
+            yoRelacional: 0,
+            yoEspiritual: 0,
+            yoProposito: 0,
+          },
+        };
+      }
+
+      const data = monthlyDataMap[monthKey];
+      data.reviewsCount++;
+      data.overallSum += r.overallRating || 0;
+
+      const keys = ["yoFisico", "yoProfesional", "yoEmprendedor", "yoMental", "yoRelacional", "yoEspiritual", "yoProposito"];
+      keys.forEach((key) => {
+        const detail = r.selfEvaluations?.[key as keyof SelfEvaluations];
+        if (detail && typeof detail.rating === "number") {
+          data.dimensionsSums[key] += detail.rating;
+          data.dimensionsCounts[key]++;
+        }
+      });
+    });
+
+    const sorted = Object.values(monthlyDataMap).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+
+    return sorted.map((m) => {
+      const keys = ["yoFisico", "yoProfesional", "yoEmprendedor", "yoMental", "yoRelacional", "yoEspiritual", "yoProposito"];
+      const avgDimensions: Record<string, number> = {};
+      keys.forEach((key) => {
+        const count = m.dimensionsCounts[key];
+        avgDimensions[key] = count > 0 ? Math.round((m.dimensionsSums[key] / count) * 100) / 100 : 3;
+      });
+
+      return {
+        monthKey: m.monthKey,
+        name: m.monthLabel,
+        overallRating: m.reviewsCount > 0 ? Math.round((m.overallSum / m.reviewsCount) * 100) / 100 : 0,
+        ...avgDimensions,
+      };
+    });
+  }, [reviews]);
+
+  const dimensionComparison = useMemo(() => {
+    if (monthlyMetrics.length === 0) return null;
+    
+    const latest = monthlyMetrics[monthlyMetrics.length - 1];
+    const previous = monthlyMetrics.length > 1 ? monthlyMetrics[monthlyMetrics.length - 2] : null;
+
+    const keys = [
+      { key: "yoFisico", label: "Yo Físico", color: "emerald", icon: Dumbbell },
+      { key: "yoProfesional", label: "Yo Profesional", color: "sky", icon: Briefcase },
+      { key: "yoEmprendedor", label: "Yo Emprendedor", color: "violet", icon: Rocket },
+      { key: "yoMental", label: "Yo Mental", color: "pink", icon: Brain },
+      { key: "yoRelacional", label: "Yo Relacional", color: "indigo", icon: Users },
+      { key: "yoEspiritual", label: "Yo Espiritual", color: "teal", icon: Sparkles },
+      { key: "yoProposito", label: "Yo Propósito", color: "amber", icon: Target },
+    ];
+
+    return keys.map((dim) => {
+      const currentVal = (latest as any)[dim.key] ?? 3;
+      const prevVal = previous ? ((previous as any)[dim.key] ?? 3) : null;
+      const diff = prevVal !== null ? Math.round((currentVal - prevVal) * 100) / 100 : 0;
+      
+      return {
+        ...dim,
+        currentVal,
+        prevVal,
+        diff,
+      };
+    });
+  }, [monthlyMetrics]);
 
   const loadData = useCallback(async () => {
     if (!uid) return;
@@ -424,8 +555,38 @@ export default function RevisionesPage() {
         </button>
       </div>
 
-      {/* Filter / Apple style segmented control */}
+      {/* View Mode Toggle: Historial vs Métricas */}
       {!showForm && (
+        <div className="flex bg-[#0d0d0d] p-1 rounded-xl border border-zinc-800/80 w-fit gap-1 shadow-inner">
+          <button
+            onClick={() => setViewMode("history")}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase cursor-pointer flex items-center gap-1.5",
+              viewMode === "history"
+                ? "bg-zinc-900 text-amber-400 shadow-sm border border-zinc-800/50"
+                : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            Historial
+          </button>
+          <button
+            onClick={() => setViewMode("dashboard")}
+            className={cn(
+              "px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all uppercase cursor-pointer flex items-center gap-1.5",
+              viewMode === "dashboard"
+                ? "bg-zinc-900 text-amber-400 shadow-sm border border-zinc-800/50"
+                : "text-zinc-500 hover:text-zinc-300"
+            )}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            Métricas de Crecimiento
+          </button>
+        </div>
+      )}
+
+      {/* Filter / Apple style segmented control */}
+      {!showForm && viewMode === "history" && (
         <div className="flex bg-[#0d0d0d] p-1 rounded-xl border border-zinc-800/80 w-fit gap-1 shadow-inner">
           <button
             onClick={() => setFilterType("ALL")}
@@ -762,9 +923,272 @@ export default function RevisionesPage() {
         </div>
       )}
 
+      {/* Progress Dashboard */}
+      {!showForm && viewMode === "dashboard" && (
+        <div className="space-y-6 animate-in fade-in slide-in duration-300">
+          {monthlyMetrics.length === 0 ? (
+            <div className="text-center py-20 bg-[#080808]/40 border border-zinc-800/60 rounded-2xl shadow-sm max-w-xl mx-auto mt-6">
+              <Activity className="w-14 h-14 text-zinc-700 mx-auto mb-4 animate-pulse" />
+              <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-2">
+                Sin datos suficientes
+              </h3>
+              <p className="text-xs text-zinc-500 max-w-xs mx-auto mb-5 leading-relaxed">
+                Registra al menos una revisión con autoevaluaciones completas para comenzar a graficar tu crecimiento.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* HUD / KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPI 1: Total Reviews */}
+                <div className="glass-card p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl" />
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-white font-mono tracking-tight">{reviews.length}</p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Revisiones Totales</p>
+                </div>
+
+                {/* KPI 2: Historic Average */}
+                <div className="glass-card p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl" />
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                      <Star className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-white font-mono tracking-tight">
+                    {(reviews.reduce((sum, r) => sum + (r.overallRating || 0), 0) / (reviews.length || 1)).toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Promedio Histórico</p>
+                </div>
+
+                {/* KPI 3: Last Month Evaluated */}
+                <div className="glass-card p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/5 rounded-full blur-xl" />
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center">
+                      <ClipboardCheck className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-black text-white font-mono tracking-tight">
+                    {monthlyMetrics[monthlyMetrics.length - 1]?.name || "N/A"}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Último Mes</p>
+                </div>
+
+                {/* KPI 4: Delta change */}
+                <div className="glass-card p-5 relative overflow-hidden group hover:border-zinc-700/60 transition-all duration-300">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl" />
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                  </div>
+                  {monthlyMetrics.length > 1 ? (
+                    (() => {
+                      const current = monthlyMetrics[monthlyMetrics.length - 1].overallRating;
+                      const prev = monthlyMetrics[monthlyMetrics.length - 2].overallRating;
+                      const diff = Math.round((current - prev) * 100) / 100;
+                      return (
+                        <>
+                          <p className={cn(
+                            "text-2xl font-black font-mono tracking-tight flex items-center gap-1.5",
+                            diff > 0 ? "text-emerald-400" : diff < 0 ? "text-rose-400" : "text-zinc-400"
+                          )}>
+                            {diff > 0 ? "+" : ""}{diff.toFixed(2)}
+                            {diff > 0 ? (
+                              <TrendingUp className="w-5 h-5 text-emerald-400" />
+                            ) : diff < 0 ? (
+                              <TrendingDown className="w-5 h-5 text-rose-400" />
+                            ) : (
+                              <Minus className="w-5 h-5 text-zinc-400" />
+                            )}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Tendencia MoM</p>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <>
+                      <p className="text-2xl font-black text-zinc-500 font-mono tracking-tight">—</p>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Tendencia MoM</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="glass-card p-6 border-zinc-800/80">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-amber-500" /> Evolución Mensual del Desempeño
+                    </h2>
+                    <p className="text-[10px] text-zinc-500 mt-1">Histórico de tus valoraciones generales agrupado por mes.</p>
+                  </div>
+                </div>
+                <div className="h-[280px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={monthlyMetrics} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="colorOverall" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" vertical={false} />
+                      <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis 
+                        stroke="rgba(255,255,255,0.2)" 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        domain={[1, 5]}
+                        tickCount={5}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          return (
+                            <div className="bg-zinc-950/95 border border-zinc-800/80 rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-md text-xs">
+                              <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2 text-[9px]">{label}</p>
+                              <div className="flex items-center gap-4 justify-between">
+                                <span className="text-zinc-400 font-medium flex items-center gap-1.5">
+                                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> Promedio General:
+                                </span>
+                                <span className="text-zinc-100 font-black font-mono">
+                                  {Number(payload[0].value).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="overallRating"
+                        name="Promedio General"
+                        stroke="#fbbf24"
+                        fillOpacity={1}
+                        fill="url(#colorOverall)"
+                        strokeWidth={2.5}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 7 Dimensions Growth Grid */}
+              <div className="space-y-4">
+                <div className="border-b border-zinc-800/60 pb-2">
+                  <h3 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" /> Progreso en las 7 Dimensiones Personales
+                  </h3>
+                  <p className="text-[10px] text-zinc-500 mt-1">Comparativa de desempeño y deltas de crecimiento MoM.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {dimensionComparison?.map((dim) => {
+                    const cfg = COLOR_MAPS[dim.color];
+                    const IconComp = dim.icon;
+                    const pct = (dim.currentVal / 5) * 100;
+                    
+                    return (
+                      <div 
+                        key={dim.key}
+                        className={cn(
+                          "bg-[#090909]/45 border border-zinc-800/80 rounded-2xl p-5 transition-all duration-300 flex flex-col justify-between",
+                          cfg.glow
+                        )}
+                      >
+                        <div>
+                          {/* Dim header */}
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className={cn("p-2.5 rounded-xl", cfg.bg, cfg.text)}>
+                                <IconComp className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-zinc-100 tracking-wide">
+                                  {dim.label}
+                                </h4>
+                                <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">
+                                  Este mes: <strong className="text-zinc-300 font-extrabold">{dim.currentVal.toFixed(1)}</strong>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Badge Delta */}
+                            {dim.prevVal !== null ? (
+                              <div className={cn(
+                                "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border",
+                                dim.diff > 0 
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                  : dim.diff < 0 
+                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20" 
+                                    : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                              )}>
+                                {dim.diff > 0 ? (
+                                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : dim.diff < 0 ? (
+                                  <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
+                                ) : (
+                                  <Minus className="w-3 h-3 text-zinc-400" />
+                                )}
+                                <span>{dim.diff > 0 ? "+" : ""}{dim.diff.toFixed(1)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[9px] font-bold text-zinc-600 bg-zinc-950 px-2 py-0.5 border border-zinc-900 rounded">
+                                MoM: —
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="progress-bar bg-zinc-950 mt-1 relative overflow-hidden">
+                            <div 
+                              className={cn(
+                                "progress-bar-fill bg-gradient-to-r",
+                                dim.color === "emerald" && "from-emerald-600 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]",
+                                dim.color === "sky" && "from-sky-600 to-sky-400 shadow-[0_0_8px_rgba(14,165,233,0.2)]",
+                                dim.color === "violet" && "from-violet-600 to-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.2)]",
+                                dim.color === "pink" && "from-pink-600 to-pink-400 shadow-[0_0_8px_rgba(236,72,153,0.2)]",
+                                dim.color === "indigo" && "from-indigo-600 to-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.2)]",
+                                dim.color === "teal" && "from-teal-600 to-teal-400 shadow-[0_0_8px_rgba(20,184,166,0.2)]",
+                                dim.color === "amber" && "from-amber-600 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
+                              )} 
+                              style={{ width: `${pct}%` }} 
+                            />
+                          </div>
+                        </div>
+
+                        {/* Prev vs Current footer values */}
+                        {dim.prevVal !== null && (
+                          <div className="flex items-center justify-between text-[9px] text-zinc-500 font-mono mt-3.5 border-t border-white/[0.02] pt-2">
+                            <span>MES ANTERIOR: <strong className="text-zinc-400 font-extrabold">{dim.prevVal.toFixed(1)}</strong></span>
+                            <span className="flex items-center gap-1">
+                              {dim.prevVal.toFixed(1)} <ArrowRight className="w-2.5 h-2.5" /> {dim.currentVal.toFixed(1)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Review List */}
-      {!showForm && filtered.length > 0 ? (
-        <div className="space-y-4">
+      {!showForm && viewMode === "history" && (
+        filtered.length > 0 ? (
+          <div className="space-y-4">
           {filtered.map((r) => {
             const isExpanded = expandedId === r.id;
             return (
@@ -1036,7 +1460,6 @@ export default function RevisionesPage() {
           })}
         </div>
       ) : (
-        !showForm && (
           <div className="text-center py-20 bg-[#080808]/40 border border-zinc-800/60 rounded-2xl shadow-sm max-w-xl mx-auto mt-6">
             <ClipboardCheck className="w-14 h-14 text-zinc-700 mx-auto mb-4" />
             <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-2">
@@ -1049,8 +1472,8 @@ export default function RevisionesPage() {
               Crear tu primera revisión
             </button>
           </div>
-        )
-      )}
+        ))
+      }
     </div>
   );
 }
