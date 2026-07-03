@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
-import { getAll, create, remove } from "@/lib/repositories/firestore";
+import { getAll, create, remove, update } from "@/lib/repositories/firestore";
 import { Review, ReviewType, SelfEvaluations, SelfEvaluationDetail } from "@/lib/types";
 import {
   ClipboardCheck,
@@ -206,6 +206,31 @@ function generatePeriod(type: ReviewType): string {
   return "";
 }
 
+function calculateReviewRating(generalRating: number, selfEvs?: SelfEvaluations): number {
+  if (!selfEvs) return generalRating;
+  const keys: (keyof SelfEvaluations)[] = [
+    "yoFisico",
+    "yoProfesional",
+    "yoEmprendedor",
+    "yoMental",
+    "yoRelacional",
+    "yoEspiritual",
+    "yoProposito"
+  ];
+  let sum = 0;
+  let count = 0;
+  keys.forEach((key) => {
+    const detail = selfEvs[key];
+    if (detail && typeof detail.rating === "number") {
+      sum += detail.rating;
+      count++;
+    }
+  });
+  const avgDimensions = count > 0 ? sum / count : generalRating;
+  const val = (generalRating / 2) + (avgDimensions / 2);
+  return Math.round(val * 100) / 100;
+}
+
 export default function RevisionesPage() {
   const { user } = useAuth();
   const uid = useUid();
@@ -238,11 +263,38 @@ export default function RevisionesPage() {
     yoProposito: { rating: 3, comment: "" },
   });
 
+  const calculatedLiveRating = useMemo(() => {
+    return calculateReviewRating(rating, selfEvaluations as SelfEvaluations);
+  }, [rating, selfEvaluations]);
+
   const loadData = useCallback(async () => {
     if (!uid) return;
-    const r = await getAll<Review>(uid, "reviews");
-    setReviews(r);
-    setLoading(false);
+    try {
+      const r = await getAll<Review>(uid, "reviews");
+      const unmigrated = r.filter((rev) => rev.generalRating === undefined);
+      
+      if (unmigrated.length > 0) {
+        console.log(`Migrating ${unmigrated.length} reviews...`);
+        await Promise.all(
+          unmigrated.map(async (rev) => {
+            const generalRating = typeof rev.overallRating === "number" ? rev.overallRating : 3;
+            const newOverallRating = calculateReviewRating(generalRating, rev.selfEvaluations);
+            await update(uid, "reviews", rev.id, {
+              generalRating,
+              overallRating: newOverallRating,
+            });
+          })
+        );
+        const refreshed = await getAll<Review>(uid, "reviews");
+        setReviews(refreshed);
+      } else {
+        setReviews(r);
+      }
+    } catch (err) {
+      console.error("Error loading or migrating reviews:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [uid]);
 
   useEffect(() => {
@@ -270,7 +322,8 @@ export default function RevisionesPage() {
       keyMetrics: [],
       adjustments: splitLines(adjustments),
       nextFocus,
-      overallRating: rating,
+      generalRating: rating,
+      overallRating: calculatedLiveRating,
       selfEvaluations: selfEvaluations as SelfEvaluations,
     });
 
@@ -453,6 +506,20 @@ export default function RevisionesPage() {
                     />
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="bg-[#121212] p-4 rounded-2xl border border-zinc-800/60 flex flex-col justify-center min-w-[200px] items-center lg:items-start">
+              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-2 text-center lg:text-left">
+                Rating Final Proyectado
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-black text-amber-400 font-mono bg-amber-500/5 px-3 py-1 border border-amber-500/10 rounded-xl">
+                  {calculatedLiveRating.toFixed(1)} ⭐
+                </span>
+                <span className="text-[9px] text-zinc-500 leading-snug max-w-[125px]">
+                  (50% Retro General + 50% Promedio Dimensiones)
+                </span>
               </div>
             </div>
           </div>
@@ -724,18 +791,23 @@ export default function RevisionesPage() {
                         {TYPE_LABELS[r.type] || r.type}
                       </span>
                       <h3 className="text-sm font-bold text-zinc-100 tracking-wide">{r.period}</h3>
-                      <div className="flex bg-[#0f0f0f] border border-zinc-800/60 p-1.5 rounded-lg gap-0.5 shadow-inner">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            className={cn(
-                              "w-3.5 h-3.5",
-                              s <= r.overallRating
-                                ? "text-amber-400 fill-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.4)]"
-                                : "text-zinc-800"
-                            )}
-                          />
-                        ))}
+                      <div className="flex items-center gap-2">
+                        <div className="flex bg-[#0f0f0f] border border-zinc-800/60 p-1.5 rounded-lg gap-0.5 shadow-inner">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={cn(
+                                "w-3.5 h-3.5",
+                                s <= Math.round(r.overallRating || 0)
+                                  ? "text-amber-400 fill-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.4)]"
+                                  : "text-zinc-800"
+                              )}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-[10px] font-black text-amber-400 font-mono bg-amber-500/5 px-2 py-0.5 border border-amber-500/10 rounded-md">
+                          {(r.overallRating || 0).toFixed(1)}
+                        </span>
                       </div>
                     </div>
 

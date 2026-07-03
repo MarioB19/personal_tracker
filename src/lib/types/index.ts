@@ -341,7 +341,8 @@ export interface Review {
   keyMetrics: ReviewMetric[];
   adjustments: string[];
   nextFocus: string;
-  overallRating: 1 | 2 | 3 | 4 | 5;
+  overallRating: number;
+  generalRating?: number;
   selfEvaluations?: SelfEvaluations;
   createdAt: Timestamp;
   updatedAt: Timestamp;
