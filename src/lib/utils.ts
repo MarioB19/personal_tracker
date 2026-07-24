@@ -55,22 +55,28 @@ export function normalizeActivityName(title: string): string {
   // 1. Dormir
   if (/^dormir$/i.test(trimmed)) return "Dormir";
 
-  // 2. Descanso / Libre
+  // 2. Astra
+  if (/^astra$/i.test(trimmed)) return "Astra";
+
+  // 3. Deep Work (Emprender)
+  if (/deep work/i.test(trimmed)) return "Deep Work (Emprender)";
+
+  // 4. Descanso / Libre
   if (/^(descansar|descanso|libre)$/i.test(trimmed) || /descansar \+ journaling \+ leer/i.test(trimmed)) return "Descanso";
 
-  // 3. Daskalos & Redes
+  // 5. Daskalos & Redes
   if (/daskalos/i.test(trimmed) || /^red$/i.test(trimmed)) return "Daskalos / Red";
 
-  // 4. Running / Correr
+  // 6. Gym
+  if (/^gym$/i.test(trimmed)) return "Gym";
+
+  // 7. Running / Correr
   if (/^(running|correr)$/i.test(trimmed)) return "Running";
 
-  // 5. Acomodar & Lectura
-  if (/acomodar \+ leer/i.test(trimmed)) return "Acomodar + Leer";
-  if (/^leer$/i.test(trimmed)) return "Leer";
-  if (/^journaling$/i.test(trimmed)) return "Journaling";
-
-  // 6. Estudios / Aprendizaje
-  if (/^(aprendizaje t[eé]cnico|tarea|ingl[eé]s)$/i.test(trimmed)) return "Aprendizaje";
+  // 8. Aprendizaje y Hábitos (Agrupa: Leer, Journaling, Acomodar + Leer, Tarea, Inglés, Aprendizaje técnico, Misa)
+  if (/^(acomodar \+ leer|leer|journaling|aprendizaje t[eé]cnico|tarea|ingl[eé]s|misa|acomodar)$/i.test(trimmed)) {
+    return "Aprendizaje y Hábitos";
+  }
 
   // Retornar título original si no coincide con ningún alias conocido
   return trimmed;
