@@ -28,7 +28,7 @@ import {
   Filter,
   Edit2
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeActivityName } from "@/lib/utils";
 
 const DAYS: { key: DayOfWeek; label: string; short: string }[] = [
   { key: "MON", label: "Lunes", short: "Lun" },
@@ -115,35 +115,20 @@ function checkOverlap(
   const eA = endA === "24:00" ? 24 * 60 : parseTimeToMinutes(endA);
   const sB = parseTimeToMinutes(startB);
   const eB = endB === "24:00" ? 24 * 60 : parseTimeToMinutes(endB);
-  return sA < eB && eA > sB;
+  return Math.max(sA, sB) < Math.min(eA, eB);
 }
 
 function getISOWeek(date: Date): string {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const week1 = new Date(d.getFullYear(), 0, 4);
   const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
   return `${d.getFullYear()}-W${weekNum.toString().padStart(2, "0")}`;
 }
 
 function normalizeActivityTitle(title: string): string {
-  if (!title) return "Sin título";
-  const t = title.trim().toLowerCase();
-
-  const isDaskalosRelated = t.includes("daskalos") || t.includes("daksalos") || t.includes("dasaklos") || t.includes("dáskalos");
-  const isReunion = t.includes("reunion") || t.includes("reunión");
-
-  if (isDaskalosRelated && isReunion) {
-    return "Daskalos";
-  }
-
-  const isRed = t.includes("red");
-  if (isDaskalosRelated && isRed && t.includes("+")) {
-    return "Daskalos + Red";
-  }
-
-  return title.trim();
+  return normalizeActivityName(title);
 }
 
 interface TemplateSlot {

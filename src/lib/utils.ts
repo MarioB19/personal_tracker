@@ -56,13 +56,10 @@ export function normalizeActivityName(title: string): string {
   if (/^dormir$/i.test(trimmed)) return "Dormir";
 
   // 2. Descanso / Libre
-  if (/^(descansar|descanso|libre)$/i.test(trimmed)) return "Descanso";
-  if (/descansar \+ journaling \+ leer/i.test(trimmed)) return "Descanso + Hábitos";
+  if (/^(descansar|descanso|libre)$/i.test(trimmed) || /descansar \+ journaling \+ leer/i.test(trimmed)) return "Descanso";
 
   // 3. Daskalos & Redes
-  if (/daskalos \+ red/i.test(trimmed)) return "Daskalos / Red";
-  if (/^daskalos$/i.test(trimmed)) return "Daskalos";
-  if (/^red$/i.test(trimmed)) return "Redes";
+  if (/daskalos/i.test(trimmed) || /^red$/i.test(trimmed)) return "Daskalos / Red";
 
   // 4. Running / Correr
   if (/^(running|correr)$/i.test(trimmed)) return "Running";
