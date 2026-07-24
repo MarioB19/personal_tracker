@@ -44,40 +44,45 @@ const CATEGORIES: BlockCategory[] = ["TRABAJO", "APRENDIZAJE", "SALUD", "PERSONA
 
 const CATEGORY_CONFIG: Record<
   BlockCategory,
-  { border: string; bg: string; text: string; label: string; icon: React.ElementType }
+  { border: string; bg: string; text: string; glow: string; label: string; icon: React.ElementType }
 > = {
   TRABAJO: {
     border: "border-l-blue-500 hover:border-blue-400",
-    bg: "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20",
+    bg: "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 backdrop-blur-md",
     text: "text-blue-400",
+    glow: "group-hover:shadow-[0_0_15px_rgba(59,130,246,0.25)]",
     label: "Trabajo",
     icon: Briefcase,
   },
   APRENDIZAJE: {
     border: "border-l-purple-500 hover:border-purple-400",
-    bg: "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20",
+    bg: "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 backdrop-blur-md",
     text: "text-purple-400",
+    glow: "group-hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]",
     label: "Aprendizaje",
     icon: Zap,
   },
   SALUD: {
     border: "border-l-emerald-500 hover:border-emerald-400",
-    bg: "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20",
+    bg: "bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 backdrop-blur-md",
     text: "text-emerald-400",
+    glow: "group-hover:shadow-[0_0_15px_rgba(16,185,129,0.25)]",
     label: "Salud",
     icon: Heart,
   },
   PERSONAL: {
     border: "border-l-amber-500 hover:border-amber-400",
-    bg: "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20",
+    bg: "bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 backdrop-blur-md",
     text: "text-amber-400",
+    glow: "group-hover:shadow-[0_0_15px_rgba(245,158,11,0.25)]",
     label: "Personal",
     icon: Activity,
   },
   OCIO: {
     border: "border-l-pink-500 hover:border-pink-400",
-    bg: "bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20",
+    bg: "bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20 backdrop-blur-md",
     text: "text-pink-400",
+    glow: "group-hover:shadow-[0_0_15px_rgba(236,72,153,0.25)]",
     label: "Ocio",
     icon: Smile,
   },
@@ -1498,9 +1503,10 @@ export default function AgendaPage() {
                                 right: "2.5px"
                               }}
                               className={cn(
-                                "absolute text-left group overflow-hidden border border-white/[0.03] flex flex-col hover:scale-[1.02] hover:shadow-xl hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing",
+                                "absolute text-left group overflow-hidden border border-white/[0.04] flex flex-col hover:scale-[1.02] hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing shadow-sm",
                                 cfg.border,
                                 cfg.bg,
+                                cfg.glow,
                                 isCompleted && "opacity-45 grayscale",
                                 (!isMatching) && "opacity-15 blur-[0.3px] scale-95 pointer-events-none z-0",
                                 isShortBlock 
@@ -1717,9 +1723,10 @@ export default function AgendaPage() {
                                   right: "2.5px"
                                 }}
                                 className={cn(
-                                  "absolute text-left group overflow-hidden border border-white/[0.03] flex flex-col hover:scale-[1.02] hover:shadow-xl hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing",
+                                  "absolute text-left group overflow-hidden border border-white/[0.04] flex flex-col hover:scale-[1.02] hover:z-30 transition-all duration-300 active:scale-95 cursor-grab active:cursor-grabbing shadow-sm",
                                   cfg.border,
                                   cfg.bg,
+                                  cfg.glow,
                                   (!isMatching) && "opacity-15 blur-[0.3px] scale-95 pointer-events-none z-0",
                                   isShortBlock 
                                     ? "rounded-md p-0 px-1 py-0.5 justify-center leading-none border-l-2" 
