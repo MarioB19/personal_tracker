@@ -9,7 +9,7 @@ import {
   ArrowUpRight, ArrowDownRight, Compass, ShieldAlert, Sparkles, 
   ChevronLeft, ChevronRight, Eye, Percent, TrendingUp, Info, CreditCard
 } from "lucide-react";
-import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+import { formatCurrency, formatPercent, cn, normalizeActivityName } from "@/lib/utils";
 import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, ReferenceLine
@@ -362,6 +362,31 @@ export default function AnaliticaPage() {
     });
 
     return Object.values(categoryMap).filter(c => c.planificadas > 0);
+  }, [filteredTimeBlocks]);
+
+  // Chart 5: Homologated Activities Breakdown (Ranking of top consolidated activities)
+  const homologatedActivitiesData = useMemo(() => {
+    const map: Record<string, { name: string; category: BlockCategory; planificadas: number; reales: number }> = {};
+
+    filteredTimeBlocks.forEach(tb => {
+      const normName = normalizeActivityName(tb.title);
+      const duration = parseTimeToHours(tb.startTime, tb.endTime);
+      
+      if (!map[normName]) {
+        map[normName] = {
+          name: normName,
+          category: (tb.category as BlockCategory) || "PERSONAL",
+          planificadas: 0,
+          reales: 0,
+        };
+      }
+      map[normName].planificadas += duration;
+      if (tb.executedStatus === "COMPLETED") {
+        map[normName].reales += duration;
+      }
+    });
+
+    return Object.values(map).sort((a, b) => b.planificadas - a.planificadas);
   }, [filteredTimeBlocks]);
 
   // Chart 4: Self-Evaluations Balance of Life from reviews
@@ -825,6 +850,50 @@ export default function AnaliticaPage() {
                     <Clock className="w-5 h-5 text-zinc-700" />
                   </div>
                   <p className="text-[11px] text-zinc-500 max-w-[200px]">Planifica bloques en tu Agenda y ejecuta tareas para ver la distribución de tiempo aquí</p>
+                </div>
+              )}
+            </div>
+
+            {/* HOMOLOGATED ACTIVITIES RANKING CARD */}
+            <div className="glass-card-static p-6 border-zinc-800/80">
+              <h2 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 mb-5 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" /> Top Actividades Homologadas
+              </h2>
+              {homologatedActivitiesData.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider leading-relaxed mb-3">
+                    Consolidación automática de actividades por alias homologados (ej. Descanso, Daskalos/Red, Running, Aprendizaje).
+                  </p>
+                  <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
+                    {homologatedActivitiesData.map((act, idx) => {
+                      const totalPlan = totalHoursPlanned || 1;
+                      const pct = Math.min(100, (act.planificadas / totalPlan) * 100);
+                      return (
+                        <div key={idx} className="p-2.5 bg-zinc-950/60 border border-zinc-900/80 rounded-xl space-y-1.5 hover:border-zinc-800 transition-colors">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 font-bold truncate">
+                              <span className="w-4 text-[10px] text-zinc-500 font-mono">#{idx + 1}</span>
+                              <span className="text-zinc-200 truncate">{act.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2 font-mono text-[10px] shrink-0">
+                              <span className="text-amber-400 font-black">{act.planificadas.toFixed(1)}h</span>
+                              <span className="text-zinc-500">({pct.toFixed(1)}%)</span>
+                            </div>
+                          </div>
+                          <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" 
+                              style={{ width: `${pct}%` }} 
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-[180px] flex flex-col items-center justify-center text-center">
+                  <p className="text-[11px] text-zinc-500">No hay datos de actividades en este periodo</p>
                 </div>
               )}
             </div>

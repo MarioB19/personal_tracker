@@ -42,3 +42,39 @@ export function getStatusColor(status: string): string {
   };
   return colors[status] || "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
 }
+
+/**
+ * Normaliza y homologa títulos de actividades para que variaciones
+ * de nombres (ej: "Descansar" vs "Descanso", "Daskalos + Red" vs "Daskalos", etc.)
+ * se agrupen y contabilicen limpiamente en métricas y analíticas.
+ */
+export function normalizeActivityName(title: string): string {
+  if (!title) return "Sin Especificar";
+  const trimmed = title.trim();
+
+  // 1. Dormir
+  if (/^dormir$/i.test(trimmed)) return "Dormir";
+
+  // 2. Descanso / Libre
+  if (/^(descansar|descanso|libre)$/i.test(trimmed)) return "Descanso";
+  if (/descansar \+ journaling \+ leer/i.test(trimmed)) return "Descanso + Hábitos";
+
+  // 3. Daskalos & Redes
+  if (/daskalos \+ red/i.test(trimmed)) return "Daskalos / Red";
+  if (/^daskalos$/i.test(trimmed)) return "Daskalos";
+  if (/^red$/i.test(trimmed)) return "Redes";
+
+  // 4. Running / Correr
+  if (/^(running|correr)$/i.test(trimmed)) return "Running";
+
+  // 5. Acomodar & Lectura
+  if (/acomodar \+ leer/i.test(trimmed)) return "Acomodar + Leer";
+  if (/^leer$/i.test(trimmed)) return "Leer";
+  if (/^journaling$/i.test(trimmed)) return "Journaling";
+
+  // 6. Estudios / Aprendizaje
+  if (/^(aprendizaje t[eé]cnico|tarea|ingl[eé]s)$/i.test(trimmed)) return "Aprendizaje";
+
+  // Retornar título original si no coincide con ningún alias conocido
+  return trimmed;
+}
