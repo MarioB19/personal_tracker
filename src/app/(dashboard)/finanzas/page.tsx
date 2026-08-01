@@ -754,13 +754,27 @@ export default function FinanzasPage() {
     );
   }
 
-  const tabs: { key: TabType; label: string; icon: React.ElementType }[] = [
-    { key: "resumen", label: "Resumen", icon: Wallet },
-    { key: "ingresos", label: "Ingresos", icon: TrendingUp },
-    { key: "gastos", label: "Gastos", icon: TrendingDown },
-    { key: "deudas", label: "Deudas", icon: CreditCard },
-    { key: "ahorros", label: "Ahorros", icon: PiggyBank },
-  ];
+  const switchContext = (ctx: FinancialContext) => {
+    setFinancialContext(ctx);
+    if (ctx === "BUSINESS" && (activeTab === "deudas" || activeTab === "ahorros")) {
+      setActiveTab("resumen");
+    }
+  };
+
+  const tabs: { key: TabType; label: string; icon: React.ElementType }[] =
+    financialContext === "BUSINESS"
+      ? [
+          { key: "resumen", label: "Resumen", icon: Wallet },
+          { key: "ingresos", label: "Ingresos", icon: TrendingUp },
+          { key: "gastos", label: "Gastos", icon: TrendingDown },
+        ]
+      : [
+          { key: "resumen", label: "Resumen", icon: Wallet },
+          { key: "ingresos", label: "Ingresos", icon: TrendingUp },
+          { key: "gastos", label: "Gastos", icon: TrendingDown },
+          { key: "deudas", label: "Deudas", icon: CreditCard },
+          { key: "ahorros", label: "Ahorros", icon: PiggyBank },
+        ];
 
   return (
     <div className="space-y-8 page-enter pb-10">
@@ -794,7 +808,7 @@ export default function FinanzasPage() {
           {/* Selector [ Personal ] [ Negocio ] */}
           <div className="flex items-center gap-1.5 bg-zinc-950/80 p-1.5 border border-white/10 rounded-2xl shrink-0">
             <button
-              onClick={() => setFinancialContext("PERSONAL")}
+              onClick={() => switchContext("PERSONAL")}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200",
                 financialContext === "PERSONAL"
@@ -806,7 +820,7 @@ export default function FinanzasPage() {
               Personal
             </button>
             <button
-              onClick={() => setFinancialContext("BUSINESS")}
+              onClick={() => switchContext("BUSINESS")}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200",
                 financialContext === "BUSINESS"
