@@ -574,6 +574,32 @@ export default function FinanzasPage() {
     loadData();
   };
 
+  const openProductIncome = (p: Product) => {
+    setEditingId(null);
+    setISource("");
+    setIType("NEGOCIO");
+    setIBase("");
+    setIBenefits("");
+    setIFreq("UNICO");
+    setIHours("0");
+    setIProductId(p.id);
+    setIProductName(p.name);
+    setModal("income");
+  };
+
+  const openProductExpense = (p: Product) => {
+    setEditingId(null);
+    setEName("");
+    setECat("OTRO");
+    setEAmount("");
+    setEType("VARIABLE");
+    setEChargeDay("");
+    setEProductId(p.id);
+    setEProductName(p.name);
+    setESubscriptionStatus("active");
+    setModal("expense");
+  };
+
   const openCreateIncome = () => {
     setEditingId(null);
     setISource("");
@@ -1694,19 +1720,40 @@ export default function FinanzasPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.03]">
-                      <button
-                        onClick={() => openEditProduct(p)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 hover:bg-amber-500/10 text-zinc-300 hover:text-amber-400 transition-all flex items-center gap-1"
-                      >
-                        <Pencil className="w-3 h-3" /> Editar
-                      </button>
-                      <button
-                        onClick={() => deleteProduct(p.id)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 hover:bg-red-500/10 text-zinc-300 hover:text-red-400 transition-all flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3 h-3" /> Eliminar
-                      </button>
+                    <div className="flex items-center justify-between gap-1.5 pt-3 border-t border-white/[0.03]">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openProductIncome(p)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-all flex items-center gap-1"
+                          title="Registrar Ingreso / Ganancia para este producto"
+                        >
+                          <Plus className="w-3 h-3" /> Ganancia
+                        </button>
+                        <button
+                          onClick={() => openProductExpense(p)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all flex items-center gap-1"
+                          title="Registrar Gasto para este producto"
+                        >
+                          <Plus className="w-3 h-3" /> Gasto
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEditProduct(p)}
+                          className="p-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-amber-500/10 text-zinc-400 hover:text-amber-400 transition-all"
+                          title="Editar producto"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(p.id)}
+                          className="p-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 transition-all"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2122,13 +2169,15 @@ export default function FinanzasPage() {
                           type="button"
                           onClick={() => setEType(t)}
                           className={cn(
-                            "py-2.5 rounded-xl text-xs font-semibold border transition-all truncate transform active:scale-95",
+                            "py-2.5 rounded-xl text-xs font-semibold border transition-all truncate transform active:scale-95 px-1 text-center",
                             eType === t
                               ? "bg-amber-500/10 border-amber-500/25 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
                               : "bg-black/30 border-white/[0.04] text-zinc-500 hover:border-white/[0.15] hover:text-zinc-300"
                           )}
                         >
-                          {t === "FIJO" ? "Fijo" : t === "VARIABLE" ? "Variable" : "Suscripción"}
+                          {financialContext === "BUSINESS"
+                            ? (t === "VARIABLE" ? "Gasto Único" : t === "SUSCRIPCION" ? "Suscripción" : "Fijo Operativo")
+                            : (t === "FIJO" ? "Fijo" : t === "VARIABLE" ? "Variable" : "Suscripción")}
                         </button>
                       ))}
                     </div>
