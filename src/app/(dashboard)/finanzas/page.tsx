@@ -16,6 +16,7 @@ import {
   Debt,
   Saving,
   Milestone,
+  Product,
   IncomeType,
   ExpenseCategory,
   ExpenseType,
@@ -63,7 +64,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 
-type TabType = "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros";
+type TabType = "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
 
 // Helper functions for RPG/Gaming financial aesthetics
 const getIncomeIcon = (type: IncomeType) => {
@@ -241,12 +242,13 @@ export default function FinanzasPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [savings, setSavings] = useState<Saving[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [initialSavings, setInitialSavings] = useState<number>(0);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modal, setModal] = useState<
-    "income" | "expense" | "debt" | "saving" | "milestone" | "business_config" | null
+    "income" | "expense" | "debt" | "saving" | "milestone" | "business_config" | "product" | null
   >(null);
 
   // Form slide-over visual transition states
@@ -262,6 +264,11 @@ export default function FinanzasPage() {
   const [bCapitalInput, setBCapitalInput] = useState("");
   const [bTestCostInput, setBTestCostInput] = useState("");
 
+  // ── Product form ──
+  const [pName, setPName] = useState("");
+  const [pDescription, setPDescription] = useState("");
+  const [pStatus, setPStatus] = useState<"testing" | "active" | "archived">("testing");
+
   // ── Income form ──
   const [iSource, setISource] = useState("");
   const [iType, setIType] = useState<IncomeType>("SALARIO");
@@ -269,6 +276,7 @@ export default function FinanzasPage() {
   const [iBenefits, setIBenefits] = useState("");
   const [iFreq, setIFreq] = useState<Frequency>("MENSUAL");
   const [iHours, setIHours] = useState("160");
+  const [iProductId, setIProductId] = useState("");
   const [iProductName, setIProductName] = useState("");
 
   // ── Expense form ──
@@ -277,6 +285,7 @@ export default function FinanzasPage() {
   const [eAmount, setEAmount] = useState("");
   const [eType, setEType] = useState<ExpenseType>("VARIABLE");
   const [eChargeDay, setEChargeDay] = useState("");
+  const [eProductId, setEProductId] = useState("");
   const [eProductName, setEProductName] = useState("");
   const [eSubscriptionStatus, setESubscriptionStatus] = useState<"active" | "cancelled">("active");
 
@@ -381,14 +390,16 @@ export default function FinanzasPage() {
       setBTestCostInput(tCost.toString());
     }
 
-    const [i, e, d] = await Promise.all([
+    const [i, e, d, prods] = await Promise.all([
       getAllFinance<Income>(uid, "income"),
       getAllFinance<Expense>(uid, "expenses"),
       getAllFinance<Debt>(uid, "debts"),
+      getAllFinance<Product>(uid, "products"),
     ]);
     setIncomes(i);
     setExpenses(e);
     setDebts(d);
+    setProducts(prods);
     setSavings(synSavings);
     setMilestones(synMilestones);
     setLoading(false);
@@ -525,6 +536,44 @@ export default function FinanzasPage() {
     loadData();
   };
 
+  const openCreateProduct = () => {
+    setEditingId(null);
+    setPName("");
+    setPDescription("");
+    setPStatus("testing");
+    setModal("product");
+  };
+
+  const openEditProduct = (p: Product) => {
+    setEditingId(p.id);
+    setPName(p.name);
+    setPDescription(p.description || "");
+    setPStatus(p.status || "testing");
+    setModal("product");
+  };
+
+  const saveProduct = async () => {
+    if (!uid || !pName.trim()) return;
+    const payload = {
+      name: pName.trim(),
+      description: pDescription.trim(),
+      status: pStatus,
+    };
+    if (editingId) {
+      await updateFinance(uid, "products", editingId, payload);
+    } else {
+      await createFinance(uid, "products", payload);
+    }
+    closeModal();
+    loadData();
+  };
+
+  const deleteProduct = async (id: string) => {
+    if (!uid) return;
+    await removeFinance(uid, "products", id);
+    loadData();
+  };
+
   const openEditIncome = (i: Income) => {
     setEditingId(i.id);
     setISource(i.source);
@@ -533,6 +582,7 @@ export default function FinanzasPage() {
     setIBenefits(i.benefits.toString());
     setIFreq(i.frequency);
     setIHours(i.hoursPerMonth?.toString() || "160");
+    setIProductId(i.productId || "");
     setIProductName(i.productName || "");
     setModal("income");
   };
@@ -544,6 +594,7 @@ export default function FinanzasPage() {
     setEAmount(e.amount.toString());
     setEType(e.type);
     setEChargeDay(e.chargeDay?.toString() || "");
+    setEProductId(e.productId || "");
     setEProductName(e.productName || "");
     setESubscriptionStatus(e.subscriptionStatus || "active");
     setModal("expense");
@@ -587,6 +638,9 @@ export default function FinanzasPage() {
     const existingItem = editingId ? incomes.find((item) => item.id === editingId) : null;
     const targetCtx = existingItem?.financialContext || financialContext;
 
+    const selectedProd = products.find((p) => p.id === iProductId);
+    const finalProdName = selectedProd ? selectedProd.name : iProductName.trim();
+
     const payload = {
       source: iSource,
       type: iType,
@@ -598,7 +652,8 @@ export default function FinanzasPage() {
       costPerHour: hours > 0 ? Math.round(net / hours) : 0,
       month: currentMonth,
       financialContext: targetCtx,
-      productName: iProductName.trim() || undefined,
+      productId: iProductId || undefined,
+      productName: finalProdName || undefined,
       notes: "",
     };
     if (editingId) await updateFinance(uid, "income", editingId, payload);
@@ -609,13 +664,16 @@ export default function FinanzasPage() {
   };
 
   const resetIncomeForm = () => {
-    setISource(""); setIType("SALARIO"); setIBase(""); setIBenefits(""); setIFreq("MENSUAL"); setIHours("160"); setIProductName("");
+    setISource(""); setIType("SALARIO"); setIBase(""); setIBenefits(""); setIFreq("MENSUAL"); setIHours("160"); setIProductId(""); setIProductName("");
   };
 
   const saveExpense = async () => {
     if (!uid || !eName.trim()) return;
     const existingItem = editingId ? expenses.find((item) => item.id === editingId) : null;
     const targetCtx = existingItem?.financialContext || financialContext;
+
+    const selectedProd = products.find((p) => p.id === eProductId);
+    const finalProdName = selectedProd ? selectedProd.name : eProductName.trim();
 
     const payload = {
       name: eName,
@@ -627,7 +685,8 @@ export default function FinanzasPage() {
       month: currentMonth,
       isNecessity: true,
       financialContext: targetCtx,
-      productName: eProductName.trim() || undefined,
+      productId: eProductId || undefined,
+      productName: finalProdName || undefined,
       subscriptionStatus: eType === "SUSCRIPCION" ? eSubscriptionStatus : undefined,
       notes: "",
     };
@@ -639,7 +698,7 @@ export default function FinanzasPage() {
   };
 
   const resetExpenseForm = () => {
-    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductName(""); setESubscriptionStatus("active");
+    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductId(""); setEProductName(""); setESubscriptionStatus("active");
   };
 
   const saveDebt = async () => {
@@ -767,6 +826,7 @@ export default function FinanzasPage() {
           { key: "resumen", label: "Resumen", icon: Wallet },
           { key: "ingresos", label: "Ingresos", icon: TrendingUp },
           { key: "gastos", label: "Gastos", icon: TrendingDown },
+          { key: "productos", label: "Productos", icon: Package },
         ]
       : [
           { key: "resumen", label: "Resumen", icon: Wallet },
@@ -1539,6 +1599,118 @@ export default function FinanzasPage() {
       )}
 
       {/* ══════════════════════════════════════
+          TAB: PRODUCTOS (Business)
+      ══════════════════════════════════════ */}
+      {activeTab === "productos" && (
+        <Section
+          title="Productos de Negocio Registrados"
+          action={
+            <button
+              onClick={openCreateProduct}
+              className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+            >
+              <Plus className="w-4 h-4" /> Agregar Producto
+            </button>
+          }
+        >
+          {products.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1.5">
+              {products.map((p) => {
+                const pIncomes = monthlyIncomesList
+                  .filter((inc) => inc.productId === p.id || inc.productName?.trim().toLowerCase() === p.name.trim().toLowerCase())
+                  .reduce((s, inc) => s + inc.netIncome, 0);
+
+                const pExpenses = monthlyExpensesList
+                  .filter((exp) => (exp.productId === p.id || exp.productName?.trim().toLowerCase() === p.name.trim().toLowerCase()) && exp.subscriptionStatus !== "cancelled")
+                  .reduce((s, exp) => s + exp.amount, 0);
+
+                const pProfit = pIncomes - pExpenses;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between space-y-4 hover:border-amber-500/20 transition-all group relative overflow-hidden"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-bold text-white flex items-center gap-2">
+                          <Package className="w-4 h-4 text-amber-400" />
+                          {p.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                            p.status === "active"
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : p.status === "testing"
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              : "bg-zinc-800 text-zinc-400 border-white/5"
+                          )}
+                        >
+                          {p.status === "active" ? "Activo" : p.status === "testing" ? "En Testeo" : "Archivado"}
+                        </span>
+                      </div>
+                      {p.description && (
+                        <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
+                          {p.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/[0.04] font-mono text-center">
+                      <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
+                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Ingresos</p>
+                        <p className="text-xs font-black text-emerald-400 mt-0.5">{formatCurrency(pIncomes)}</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
+                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Gastos</p>
+                        <p className="text-xs font-black text-red-400 mt-0.5">{formatCurrency(pExpenses)}</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
+                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Utilidad</p>
+                        <p className={cn("text-xs font-black mt-0.5", pProfit >= 0 ? "text-amber-400" : "text-red-400")}>
+                          {formatCurrency(pProfit)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.03]">
+                      <button
+                        onClick={() => openEditProduct(p)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 hover:bg-amber-500/10 text-zinc-300 hover:text-amber-400 transition-all flex items-center gap-1"
+                      >
+                        <Pencil className="w-3 h-3" /> Editar
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(p.id)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 hover:bg-red-500/10 text-zinc-300 hover:text-red-400 transition-all flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" /> Eliminar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-white/5 rounded-2xl bg-[#0c0c0e]/30">
+              <Package className="w-8 h-8 text-zinc-600 mb-3" />
+              <h3 className="text-xs font-bold text-zinc-300">Sin Productos Registrados</h3>
+              <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">
+                Crea productos para organizar tus ingresos y gastos por producto y medir su rentabilidad individual.
+              </p>
+              <button
+                onClick={openCreateProduct}
+                className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs font-bold"
+              >
+                + Registrar Primer Producto
+              </button>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ══════════════════════════════════════
           SLIDE-OVER PANELS (Unified Layout)
       ══════════════════════════════════════ */}
       {isRendered && (
@@ -1572,7 +1744,8 @@ export default function FinanzasPage() {
                      modal === "expense" ? "Gasto" :
                      modal === "debt" ? "Parámetro de Deuda" :
                      modal === "saving" ? "Ciclo de Ahorro" :
-                     modal === "business_config" ? "Configuración del Negocio" : "Milestone"}
+                     modal === "business_config" ? "Configuración del Negocio" :
+                     modal === "product" ? "Producto" : "Milestone"}
                   </h3>
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Métricas y Parámetros</p>
                 </div>
@@ -1588,6 +1761,57 @@ export default function FinanzasPage() {
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
               
+              {/* ── Product Form ── */}
+              {modal === "product" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Nombre del Producto</label>
+                    <input 
+                      value={pName} 
+                      onChange={(e) => setPName(e.target.value)} 
+                      placeholder="Ej: Moldes para Coser, E-Book Cocina..." 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Descripción (Opcional)</label>
+                    <textarea 
+                      value={pDescription} 
+                      onChange={(e) => setPDescription(e.target.value)} 
+                      placeholder="Breve descripción del producto o nicho..." 
+                      rows={3}
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Estado del Producto</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: "testing", label: "En Testeo" },
+                        { key: "active", label: "Activo" },
+                        { key: "archived", label: "Archivado" },
+                      ].map((st) => (
+                        <button
+                          key={st.key}
+                          type="button"
+                          onClick={() => setPStatus(st.key as any)}
+                          className={cn(
+                            "py-2.5 rounded-xl text-xs font-semibold border transition-all text-center transform active:scale-95",
+                            pStatus === st.key
+                              ? "bg-amber-500/10 border-amber-500/25 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+                              : "bg-black/30 border-white/[0.04] text-zinc-500 hover:border-white/[0.15] hover:text-zinc-300"
+                          )}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* ── Business Config Form ── */}
               {modal === "business_config" && (
                 <div className="space-y-4">
@@ -1639,14 +1863,35 @@ export default function FinanzasPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado (Opcional)</label>
-                    <input 
-                      list="products-suggestions"
-                      value={iProductName} 
-                      onChange={(e) => setIProductName(e.target.value)} 
-                      placeholder="Ej: Moldes para Coser, Postres para Vender" 
-                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado</label>
+                    {products.length > 0 ? (
+                      <select
+                        value={iProductId}
+                        onChange={(e) => {
+                          const pid = e.target.value;
+                          setIProductId(pid);
+                          const sel = products.find((p) => p.id === pid);
+                          if (sel) setIProductName(sel.name);
+                          else if (!pid) setIProductName("");
+                        }}
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                      >
+                        <option value="" className="bg-zinc-900">-- Ningún producto asignado --</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id} className="bg-zinc-900">
+                            {p.name} {p.status === "testing" ? "(En Testeo)" : p.status === "archived" ? "(Archivado)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        list="products-suggestions"
+                        value={iProductName} 
+                        onChange={(e) => setIProductName(e.target.value)} 
+                        placeholder="Ej: Moldes para Coser, Postres para Vender" 
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      />
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1742,14 +1987,35 @@ export default function FinanzasPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado (Opcional)</label>
-                    <input 
-                      list="products-suggestions"
-                      value={eProductName} 
-                      onChange={(e) => setEProductName(e.target.value)} 
-                      placeholder="Ej: Moldes para Coser, Postres para Vender" 
-                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado</label>
+                    {products.length > 0 ? (
+                      <select
+                        value={eProductId}
+                        onChange={(e) => {
+                          const pid = e.target.value;
+                          setEProductId(pid);
+                          const sel = products.find((p) => p.id === pid);
+                          if (sel) setEProductName(sel.name);
+                          else if (!pid) setEProductName("");
+                        }}
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                      >
+                        <option value="" className="bg-zinc-900">-- Ningún producto asignado --</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id} className="bg-zinc-900">
+                            {p.name} {p.status === "testing" ? "(En Testeo)" : p.status === "archived" ? "(Archivado)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        list="products-suggestions"
+                        value={eProductName} 
+                        onChange={(e) => setEProductName(e.target.value)} 
+                        placeholder="Ej: Moldes para Coser, Postres para Vender" 
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      />
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -2025,6 +2291,7 @@ export default function FinanzasPage() {
               </button>
               <button 
                 onClick={
+                  modal === "product" ? saveProduct :
                   modal === "business_config" ? saveBusinessConfig :
                   modal === "income" ? saveIncome :
                   modal === "expense" ? saveExpense :
@@ -2032,6 +2299,7 @@ export default function FinanzasPage() {
                   modal === "saving" ? saveSaving : saveMilestone
                 } 
                 disabled={
+                  modal === "product" ? !pName.trim() :
                   modal === "income" ? !iSource.trim() :
                   modal === "expense" ? !eName.trim() :
                   modal === "debt" ? !dEntity.trim() :
@@ -2041,7 +2309,7 @@ export default function FinanzasPage() {
                 className="btn-primary pl-4 pr-5 h-11 disabled:opacity-50 disabled:grayscale transition-all duration-300 flex items-center justify-center gap-1.5 rounded-xl text-xs font-black shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:shadow-[0_0_30px_rgba(245,158,11,0.25)]"
               >
                 <Save className="w-4 h-4" />
-                {modal === "business_config" ? "Guardar Configuración" : editingId ? "Guardar Cambios" : "Agregar"}
+                {modal === "business_config" ? "Guardar Configuración" : modal === "product" ? (editingId ? "Guardar Cambios" : "Crear Producto") : editingId ? "Guardar Cambios" : "Agregar"}
               </button>
             </div>
           </div>

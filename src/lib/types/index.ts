@@ -165,6 +165,16 @@ export interface Activity {
   updatedAt: Timestamp;
 }
 
+export interface Product {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  status?: "testing" | "active" | "archived";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface Income {
   id: string;
   userId: string;
@@ -178,6 +188,7 @@ export interface Income {
   costPerHour: number;
   month: string;
   financialContext?: FinancialContext;
+  productId?: string;
   productName?: string;
   notes: string;
   createdAt: Timestamp;
@@ -196,6 +207,7 @@ export interface Expense {
   month: string;
   isNecessity: boolean;
   financialContext?: FinancialContext;
+  productId?: string;
   productName?: string;
   subscriptionStatus?: "active" | "cancelled";
   notes: string;
