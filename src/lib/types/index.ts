@@ -57,6 +57,8 @@ export type ExpenseCategory =
 
 export type ExpenseType = "FIJO" | "VARIABLE" | "SUSCRIPCION";
 
+export type FinancialContext = "PERSONAL" | "BUSINESS";
+
 export type Frequency = "MENSUAL" | "QUINCENAL" | "SEMANAL" | "ANUAL";
 
 export type DebtType =
@@ -175,6 +177,8 @@ export interface Income {
   hoursPerMonth: number;
   costPerHour: number;
   month: string;
+  financialContext?: FinancialContext;
+  productName?: string;
   notes: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -191,6 +195,9 @@ export interface Expense {
   chargeDay?: number; // Día del mes para gastos fijos
   month: string;
   isNecessity: boolean;
+  financialContext?: FinancialContext;
+  productName?: string;
+  subscriptionStatus?: "active" | "cancelled";
   notes: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

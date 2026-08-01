@@ -19,6 +19,7 @@ import {
   IncomeType,
   ExpenseCategory,
   ExpenseType,
+  FinancialContext,
   Frequency,
   DebtType,
 } from "@/lib/types";
@@ -52,7 +53,13 @@ import {
   Laptop,
   Sparkles,
   Building,
-  DollarSign
+  DollarSign,
+  User,
+  Tag,
+  Package,
+  Store,
+  Layers,
+  ShoppingBag
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -239,12 +246,21 @@ export default function FinanzasPage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modal, setModal] = useState<
-    "income" | "expense" | "debt" | "saving" | "milestone" | null
+    "income" | "expense" | "debt" | "saving" | "milestone" | "business_config" | null
   >(null);
 
   // Form slide-over visual transition states
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+
+  // ── Context State (Personal vs Business) ──
+  const [financialContext, setFinancialContext] = useState<FinancialContext>("PERSONAL");
+
+  // ── Business Config State ──
+  const [initialBusinessCapital, setInitialBusinessCapital] = useState<number>(0);
+  const [productTestCost, setProductTestCost] = useState<number>(1000);
+  const [bCapitalInput, setBCapitalInput] = useState("");
+  const [bTestCostInput, setBTestCostInput] = useState("");
 
   // ── Income form ──
   const [iSource, setISource] = useState("");
@@ -253,6 +269,7 @@ export default function FinanzasPage() {
   const [iBenefits, setIBenefits] = useState("");
   const [iFreq, setIFreq] = useState<Frequency>("MENSUAL");
   const [iHours, setIHours] = useState("160");
+  const [iProductName, setIProductName] = useState("");
 
   // ── Expense form ──
   const [eName, setEName] = useState("");
@@ -260,6 +277,8 @@ export default function FinanzasPage() {
   const [eAmount, setEAmount] = useState("");
   const [eType, setEType] = useState<ExpenseType>("VARIABLE");
   const [eChargeDay, setEChargeDay] = useState("");
+  const [eProductName, setEProductName] = useState("");
+  const [eSubscriptionStatus, setESubscriptionStatus] = useState<"active" | "cancelled">("active");
 
   // ── Debt form ──
   const [dEntity, setDEntity] = useState("");
@@ -351,6 +370,17 @@ export default function FinanzasPage() {
       });
     }
 
+    const bConfigDoc = await getDoc(doc(db, "users", uid, "finance", "business_config"));
+    if (bConfigDoc.exists()) {
+      const bData = bConfigDoc.data();
+      const cap = bData.initialBusinessCapital || 0;
+      const tCost = bData.productTestCost || 1000;
+      setInitialBusinessCapital(cap);
+      setProductTestCost(tCost);
+      setBCapitalInput(cap.toString());
+      setBTestCostInput(tCost.toString());
+    }
+
     const [i, e, d] = await Promise.all([
       getAllFinance<Income>(uid, "income"),
       getAllFinance<Expense>(uid, "expenses"),
@@ -368,39 +398,131 @@ export default function FinanzasPage() {
     if (uid) loadData();
   }, [uid, loadData]);
 
+  // Lista unificada de nombres de productos registrados para autocompletar
+  const productNamesList = Array.from(
+    new Set(
+      [...incomes, ...expenses]
+        .map((item) => item.productName?.trim())
+        .filter((name): name is string => Boolean(name))
+    )
+  );
+
   // ── Computed ──
   const totalMinPayment = debts
     .filter((d) => d.status === "ACTIVE")
     .reduce((sum, d) => sum + d.minimumPayment, 0);
 
-  const monthlyIncomesList = incomes.filter(inc => {
-    if (currentMonth < "2026-03") return false;
-    return true;
+  const monthlyIncomesList = incomes.filter((inc) => {
+    const ctx = inc.financialContext || "PERSONAL";
+    return ctx === financialContext;
   });
 
-  const monthlyExpensesList = expenses.filter(exp => {
-    if (currentMonth < "2026-03") return false;
-    return true;
+  const monthlyExpensesList = expenses.filter((exp) => {
+    const ctx = exp.financialContext || "PERSONAL";
+    return ctx === financialContext;
   });
+
+  // Business Specific Calculations
+  const productExpenses = monthlyExpensesList
+    .filter((e) => e.type !== "SUSCRIPCION")
+    .reduce((s, e) => s + e.amount, 0);
+
+  const monthlySubscriptions = monthlyExpensesList
+    .filter((e) => e.type === "SUSCRIPCION" && (e.subscriptionStatus || "active") !== "cancelled")
+    .reduce((s, e) => s + e.amount, 0);
 
   const totalIncome = monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
-  const totalExpenses = monthlyExpensesList.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
+
+  const totalExpenses =
+    financialContext === "BUSINESS"
+      ? productExpenses + monthlySubscriptions
+      : monthlyExpensesList.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
+
+  const netBalance = totalIncome - totalExpenses;
+  const netProfit = totalIncome - totalExpenses;
+
+  // Business Runway, Capital & Product Testing Calculations
+  const currentBusinessCapital = initialBusinessCapital + netProfit;
+  const burnRate = netProfit < 0 ? Math.abs(netProfit) : 0;
+  const runwayMonths =
+    netProfit >= 0
+      ? null
+      : burnRate > 0 && currentBusinessCapital > 0
+      ? currentBusinessCapital / burnRate
+      : 0;
+  const testCost = productTestCost > 0 ? productTestCost : 1000;
+  const possibleTests =
+    currentBusinessCapital > 0 ? Math.floor(currentBusinessCapital / testCost) : 0;
+
   const totalDebt = debts
     .filter((d) => d.status === "ACTIVE")
     .reduce((s, d) => s + d.currentBalance, 0);
-  const netBalance = totalIncome - totalExpenses;
+
   const totalSaved = initialSavings + savings.reduce((s, sv) => s + sv.actualAmount, 0);
+
   const avgCostPerHour =
     monthlyIncomesList.length > 0
       ? monthlyIncomesList.reduce((s, i) => s + i.costPerHour, 0) / monthlyIncomesList.length
       : 0;
+
   const savingsRate =
     totalIncome > 0 ? Math.round((netBalance / totalIncome) * 100) : 0;
+
+  // Rentabilidad por Producto (para Business)
+  const productSummaryMap = new Map<string, { income: number; expense: number }>();
+
+  monthlyIncomesList.forEach((inc) => {
+    const pName = inc.productName?.trim();
+    if (pName) {
+      const current = productSummaryMap.get(pName) || { income: 0, expense: 0 };
+      current.income += inc.netIncome;
+      productSummaryMap.set(pName, current);
+    }
+  });
+
+  monthlyExpensesList.forEach((exp) => {
+    const pName = exp.productName?.trim();
+    if (pName) {
+      if (exp.type === "SUSCRIPCION" && exp.subscriptionStatus === "cancelled") return;
+      const current = productSummaryMap.get(pName) || { income: 0, expense: 0 };
+      current.expense += exp.amount;
+      productSummaryMap.set(pName, current);
+    }
+  });
+
+  const productSummaries = Array.from(productSummaryMap.entries()).map(([name, data]) => ({
+    name,
+    income: data.income,
+    expense: data.expense,
+    profit: data.income - data.expense,
+  }));
 
   // ── Saves ──
   const closeModal = () => {
     setModal(null);
     setEditingId(null);
+  };
+
+  const openEditBusinessConfig = () => {
+    setBCapitalInput(initialBusinessCapital.toString());
+    setBTestCostInput(productTestCost.toString());
+    setModal("business_config");
+  };
+
+  const saveBusinessConfig = async () => {
+    if (!uid) return;
+    const cap = Number(bCapitalInput) || 0;
+    const tCost = Number(bTestCostInput) || 1000;
+    setInitialBusinessCapital(cap);
+    setProductTestCost(tCost);
+
+    await setDoc(
+      doc(db, "users", uid, "finance", "business_config"),
+      { initialBusinessCapital: cap, productTestCost: tCost },
+      { merge: true }
+    );
+    closeModal();
+    loadData();
   };
 
   const openEditIncome = (i: Income) => {
@@ -411,6 +533,7 @@ export default function FinanzasPage() {
     setIBenefits(i.benefits.toString());
     setIFreq(i.frequency);
     setIHours(i.hoursPerMonth?.toString() || "160");
+    setIProductName(i.productName || "");
     setModal("income");
   };
 
@@ -421,6 +544,8 @@ export default function FinanzasPage() {
     setEAmount(e.amount.toString());
     setEType(e.type);
     setEChargeDay(e.chargeDay?.toString() || "");
+    setEProductName(e.productName || "");
+    setESubscriptionStatus(e.subscriptionStatus || "active");
     setModal("expense");
   };
 
@@ -458,6 +583,10 @@ export default function FinanzasPage() {
     const benefits = Number(iBenefits) || 0;
     const net = base + benefits;
     const hours = Number(iHours) || 160;
+
+    const existingItem = editingId ? incomes.find((item) => item.id === editingId) : null;
+    const targetCtx = existingItem?.financialContext || financialContext;
+
     const payload = {
       source: iSource,
       type: iType,
@@ -468,6 +597,8 @@ export default function FinanzasPage() {
       hoursPerMonth: hours,
       costPerHour: hours > 0 ? Math.round(net / hours) : 0,
       month: currentMonth,
+      financialContext: targetCtx,
+      productName: iProductName.trim() || undefined,
       notes: "",
     };
     if (editingId) await updateFinance(uid, "income", editingId, payload);
@@ -478,11 +609,14 @@ export default function FinanzasPage() {
   };
 
   const resetIncomeForm = () => {
-    setISource(""); setIType("SALARIO"); setIBase(""); setIBenefits(""); setIFreq("MENSUAL"); setIHours("160");
+    setISource(""); setIType("SALARIO"); setIBase(""); setIBenefits(""); setIFreq("MENSUAL"); setIHours("160"); setIProductName("");
   };
 
   const saveExpense = async () => {
     if (!uid || !eName.trim()) return;
+    const existingItem = editingId ? expenses.find((item) => item.id === editingId) : null;
+    const targetCtx = existingItem?.financialContext || financialContext;
+
     const payload = {
       name: eName,
       category: eCat,
@@ -492,6 +626,9 @@ export default function FinanzasPage() {
       chargeDay: (eType === "SUSCRIPCION" || eType === "FIJO") && eChargeDay ? Number(eChargeDay) : undefined,
       month: currentMonth,
       isNecessity: true,
+      financialContext: targetCtx,
+      productName: eProductName.trim() || undefined,
+      subscriptionStatus: eType === "SUSCRIPCION" ? eSubscriptionStatus : undefined,
       notes: "",
     };
     if (editingId) await updateFinance(uid, "expenses", editingId, payload);
@@ -502,7 +639,7 @@ export default function FinanzasPage() {
   };
 
   const resetExpenseForm = () => {
-    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay("");
+    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductName(""); setESubscriptionStatus("active");
   };
 
   const saveDebt = async () => {
@@ -628,61 +765,154 @@ export default function FinanzasPage() {
   return (
     <div className="space-y-8 page-enter pb-10">
       
-      {/* ── Page Header ─────────────────────── */}
+      {/* ── Page Header & Context Selector ─────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
               <Wallet className="w-5 h-5 text-black" />
             </div>
-            Control Financiero
+            Control Financiero {financialContext === "BUSINESS" ? "— Negocio" : "— Personal"}
           </h1>
           <p className="text-xs text-zinc-500 mt-1 capitalize">
             {new Date().toLocaleDateString("es-MX", { month: "long", year: "numeric" })}
           </p>
         </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
+          {financialContext === "BUSINESS" && (
+            <button
+              onClick={openEditBusinessConfig}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold bg-white/5 border border-white/10 text-zinc-300 hover:text-amber-400 hover:border-amber-500/30 transition-all"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Configurar Presupuesto
+            </button>
+          )}
+
+          {/* Selector [ Personal ] [ Negocio ] */}
+          <div className="flex items-center gap-1.5 bg-zinc-950/80 p-1.5 border border-white/10 rounded-2xl shrink-0">
+            <button
+              onClick={() => setFinancialContext("PERSONAL")}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200",
+                financialContext === "PERSONAL"
+                  ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                  : "text-zinc-400 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <User className="w-4 h-4" />
+              Personal
+            </button>
+            <button
+              onClick={() => setFinancialContext("BUSINESS")}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200",
+                financialContext === "BUSINESS"
+                  ? "bg-amber-500 text-black shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                  : "text-zinc-400 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <Briefcase className="w-4 h-4" />
+              Negocio
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Stats Grid (Premium SaaS aesthetics) ────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-        <StatCard
-          icon={TrendingUp}
-          label="Ingresos Mensuales"
-          value={formatCurrency(totalIncome)}
-          sub={incomes.length > 0 ? `${incomes.length} fuente${incomes.length > 1 ? "s" : ""}` : "Sin ingresos"}
-          color="emerald"
-        />
-        <StatCard
-          icon={TrendingDown}
-          label="Gastos Mensuales"
-          value={formatCurrency(totalExpenses)}
-          sub={expenses.length > 0 ? `${expenses.length} concepto${expenses.length > 1 ? "s" : ""}` : "Sin gastos"}
-          color="red"
-        />
-        <StatCard
-          icon={Wallet}
-          label="Balance Neto"
-          value={formatCurrency(netBalance)}
-          sub={`Tasa de Ahorro: ${savingsRate}%`}
-          color={netBalance >= 0 ? "amber" : "red"}
-        />
-        <StatCard
-          icon={CreditCard}
-          label="Deuda Activa"
-          value={formatCurrency(totalDebt)}
-          sub={debts.filter((d) => d.status === "ACTIVE").length > 0
-            ? `${debts.filter((d) => d.status === "ACTIVE").length} deuda${debts.filter((d) => d.status === "ACTIVE").length > 1 ? "s" : ""}`
-            : "Libre de deudas"}
-          color="orange"
-        />
-        <StatCard
-          icon={PiggyBank}
-          label="Total Ahorrado"
-          value={formatCurrency(totalSaved)}
-          sub={avgCostPerHour > 0 ? `${formatCurrency(avgCostPerHour)}/hr` : "Sin salario base"}
-          color="blue"
-        />
-      </div>
+      {financialContext === "PERSONAL" ? (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <StatCard
+            icon={TrendingUp}
+            label="Ingresos Mensuales"
+            value={formatCurrency(totalIncome)}
+            sub={monthlyIncomesList.length > 0 ? `${monthlyIncomesList.length} fuente${monthlyIncomesList.length > 1 ? "s" : ""}` : "Sin ingresos"}
+            color="emerald"
+          />
+          <StatCard
+            icon={TrendingDown}
+            label="Gastos Mensuales"
+            value={formatCurrency(totalExpenses)}
+            sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""}` : "Sin gastos"}
+            color="red"
+          />
+          <StatCard
+            icon={Wallet}
+            label="Balance Neto"
+            value={formatCurrency(netBalance)}
+            sub={`Tasa de Ahorro: ${savingsRate}%`}
+            color={netBalance >= 0 ? "amber" : "red"}
+          />
+          <StatCard
+            icon={CreditCard}
+            label="Deuda Activa"
+            value={formatCurrency(totalDebt)}
+            sub={debts.filter((d) => d.status === "ACTIVE").length > 0
+              ? `${debts.filter((d) => d.status === "ACTIVE").length} deuda${debts.filter((d) => d.status === "ACTIVE").length > 1 ? "s" : ""}`
+              : "Libre de deudas"}
+            color="orange"
+          />
+          <StatCard
+            icon={PiggyBank}
+            label="Total Ahorrado"
+            value={formatCurrency(totalSaved)}
+            sub={avgCostPerHour > 0 ? `${formatCurrency(avgCostPerHour)}/hr` : "Sin salario base"}
+            color="blue"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <StatCard
+            icon={Wallet}
+            label="Presupuesto Disponible"
+            value={formatCurrency(currentBusinessCapital)}
+            sub={
+              initialBusinessCapital > 0
+                ? `Base: ${formatCurrency(initialBusinessCapital)}`
+                : "Definir capital base"
+            }
+            color={currentBusinessCapital >= 0 ? "emerald" : "red"}
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="Ingresos Totales del Mes"
+            value={formatCurrency(totalIncome)}
+            sub={`${monthlyIncomesList.length} ingreso${monthlyIncomesList.length !== 1 ? "s" : ""}`}
+            color="emerald"
+          />
+          <StatCard
+            icon={TrendingDown}
+            label="Gastos Totales del Mes"
+            value={formatCurrency(totalExpenses)}
+            sub={`Suscripciones: ${formatCurrency(monthlySubscriptions)}`}
+            color="red"
+          />
+          <StatCard
+            icon={Calendar}
+            label="Runway Estimado"
+            value={
+              runwayMonths === null
+                ? "Sostenible"
+                : `${runwayMonths.toFixed(1)} meses`
+            }
+            sub={
+              burnRate > 0
+                ? `Burn rate: -${formatCurrency(burnRate)}/mes`
+                : "Sin pérdidas netas"
+            }
+            color={runwayMonths === null || runwayMonths >= 6 ? "blue" : "orange"}
+          />
+          <StatCard
+            icon={Package}
+            label="Testeo de Productos"
+            value={`~${possibleTests} producto${possibleTests !== 1 ? "s" : ""}`}
+            sub={`Costo test: ${formatCurrency(testCost)}`}
+            color="amber"
+          />
+        </div>
+      )}
 
       {/* ── Tabs (Premium pill container) ──────────────────── */}
       <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
@@ -707,146 +937,256 @@ export default function FinanzasPage() {
           TAB: RESUMEN
       ══════════════════════════════════════ */}
       {activeTab === "resumen" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Métricas clave */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Savings Rate Interactive Gauges */}
-              <div className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between h-full relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5">
-                  <PiggyBank className="w-24 h-24 text-amber-400" />
-                </div>
-                <div>
-                  <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Tasa de Ahorro Real</h4>
-                  <p className="text-2xl font-black text-white font-mono">{savingsRate}%</p>
-                  <p className="text-[11px] text-zinc-400 mt-2">
-                    Tu tasa actual es del <span className={cn("font-bold", savingsRate >= 20 ? "text-emerald-400" : "text-amber-400")}>{savingsRate}%</span>. 
-                    El recomendado de salud financiera es un mínimo del <span className="font-bold text-emerald-400 font-mono">20%</span>.
-                  </p>
-                </div>
-                <div className="mt-5">
-                  <div className="flex justify-between text-[9px] text-zinc-500 mb-1 font-mono uppercase tracking-wider font-bold">
-                    <span>Progreso de Salud</span>
-                    <span>{savingsRate}% / 20%</span>
+        <div className="space-y-6">
+          {financialContext === "PERSONAL" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              {/* Métricas clave */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Savings Rate Interactive Gauges */}
+                  <div className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between h-full relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5">
+                      <PiggyBank className="w-24 h-24 text-amber-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Tasa de Ahorro Real</h4>
+                      <p className="text-2xl font-black text-white font-mono">{savingsRate}%</p>
+                      <p className="text-[11px] text-zinc-400 mt-2">
+                        Tu tasa actual es del <span className={cn("font-bold", savingsRate >= 20 ? "text-emerald-400" : "text-amber-400")}>{savingsRate}%</span>. 
+                        El recomendado de salud financiera es un mínimo del <span className="font-bold text-emerald-400 font-mono">20%</span>.
+                      </p>
+                    </div>
+                    <div className="mt-5">
+                      <div className="flex justify-between text-[9px] text-zinc-500 mb-1 font-mono uppercase tracking-wider font-bold">
+                        <span>Progreso de Salud</span>
+                        <span>{savingsRate}% / 20%</span>
+                      </div>
+                      <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-white/5">
+                        <div 
+                          className={cn("h-full rounded-full transition-all duration-700", 
+                            savingsRate >= 20 
+                              ? "bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]" 
+                              : "bg-gradient-to-r from-amber-600 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
+                          )}
+                          style={{ width: `${Math.min((savingsRate / 20) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-white/5">
-                    <div 
-                      className={cn("h-full rounded-full transition-all duration-700", 
-                        savingsRate >= 20 
-                          ? "bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]" 
-                          : "bg-gradient-to-r from-amber-600 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
-                      )}
-                      style={{ width: `${Math.min((savingsRate / 20) * 100, 100)}%` }}
-                    />
+
+                  {/* Hour cost evaluation */}
+                  <div className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between h-full relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5">
+                      <Zap className="w-24 h-24 text-blue-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Valor Neto de Tu Hora</h4>
+                      <p className="text-2xl font-black text-white font-mono">{formatCurrency(avgCostPerHour)}<span className="text-xs text-zinc-500 font-normal"> / hr</span></p>
+                      <p className="text-[11px] text-zinc-400 mt-2">
+                        Cada hora de tu vida laboral neta equivale a <span className="font-bold text-blue-400">{formatCurrency(avgCostPerHour)}</span>. 
+                        ¡Úsalo de referencia para evaluar compras impulsivas!
+                      </p>
+                    </div>
+                    <div className="mt-5 pt-3.5 border-t border-white/[0.03] flex items-center justify-between text-[10px] text-zinc-500">
+                      <span>Sueldo Promedio Neto</span>
+                      <span className="font-mono text-zinc-300 font-bold">{formatCurrency(totalIncome)}</span>
+                    </div>
                   </div>
                 </div>
+
+                <Section title="Estructura de Gastos y Amortización">
+                  <div className="divide-y divide-white/[0.04]">
+                    {[
+                      { label: "Gastos Fijos Planificados", value: formatCurrency(expenses.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Home },
+                      { label: "Gastos Variables Estimados", value: formatCurrency(expenses.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Zap },
+                      { label: "Suscripciones Recurrentes", value: formatCurrency(expenses.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: RefreshCw },
+                      { label: "Pago Mínimo Comprometido (Deuda)", value: formatCurrency(debts.filter((d) => d.status === "ACTIVE").reduce((s, d) => s + d.minimumPayment, 0)), highlight: debts.filter((d) => d.status === "ACTIVE").length > 0, icon: CreditCard },
+                    ].map((row, i) => {
+                      const RowIcon = row.icon;
+                      return (
+                        <div key={i} className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.01] transition-colors rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-zinc-500 shrink-0">
+                              <RowIcon className="w-4 h-4" />
+                            </div>
+                            <span className="text-sm font-semibold text-zinc-300">{row.label}</span>
+                          </div>
+                          <span className={cn("text-sm font-black font-mono", row.highlight ? "text-orange-400" : "text-zinc-100")}>
+                            {row.value}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Section>
               </div>
 
-              {/* Hour cost evaluation */}
-              <div className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between h-full relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5">
-                  <Zap className="w-24 h-24 text-blue-400" />
-                </div>
-                <div>
-                  <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Valor Neto de Tu Hora</h4>
-                  <p className="text-2xl font-black text-white font-mono">{formatCurrency(avgCostPerHour)}<span className="text-xs text-zinc-500 font-normal"> / hr</span></p>
-                  <p className="text-[11px] text-zinc-400 mt-2">
-                    Cada hora de tu vida laboral neta equivale a <span className="font-bold text-blue-400">{formatCurrency(avgCostPerHour)}</span>. 
-                    ¡Úsalo de referencia para evaluar compras impulsivas!
-                  </p>
-                </div>
-                <div className="mt-5 pt-3.5 border-t border-white/[0.03] flex items-center justify-between text-[10px] text-zinc-500">
-                  <span>Sueldo Promedio Neto</span>
-                  <span className="font-mono text-zinc-300 font-bold">{formatCurrency(totalIncome)}</span>
-                </div>
+              {/* Milestones Financieros */}
+              <div>
+                <Section title="Milestones Financieros">
+                  {milestones.length > 0 ? (
+                    <div className="divide-y divide-white/[0.04] p-1.5 space-y-2">
+                      {milestones.map((m) => (
+                        <div key={m.id} className="p-4 group glass-card bg-[#0c0c0e]/40 border-white/[0.02] rounded-xl relative overflow-hidden transition-all duration-300">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-bold text-zinc-200 tracking-tight">{m.name}</p>
+                            <div className="flex items-center gap-2">
+                              <span className={cn(
+                                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                                m.status === "REACHED"
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              )}>
+                                {m.status === "REACHED" ? "✓ Alcanzado" : `${m.progress}%`}
+                              </span>
+                              <button
+                                onClick={() => openEditMilestone(m)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 active:scale-95"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => deleteItem("milestones", m.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 active:scale-95"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="w-full bg-zinc-950 border border-white/5 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
+                                style={{ width: `${Math.min(m.progress, 100)}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono">
+                              <span>{formatCurrency(m.currentAmount)}</span>
+                              <span>Meta: {formatCurrency(m.targetAmount)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <Target className="w-7 h-7 text-zinc-700 mb-3" />
+                      <p className="text-xs font-semibold text-zinc-400">Sin hitos financieros activos</p>
+                      <p className="text-[10px] text-zinc-500 mt-1">Créalos en la pestaña de Ahorros para ver tu progreso</p>
+                    </div>
+                  )}
+                </Section>
               </div>
             </div>
-
-            <Section title="Estructura de Gastos y Amortización">
-              <div className="divide-y divide-white/[0.04]">
-                {[
-                  { label: "Gastos Fijos Planificados", value: formatCurrency(expenses.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Home },
-                  { label: "Gastos Variables Estimados", value: formatCurrency(expenses.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Zap },
-                  { label: "Suscripciones Recurrentes", value: formatCurrency(expenses.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: RefreshCw },
-                  { label: "Pago Mínimo Comprometido (Deuda)", value: formatCurrency(debts.filter((d) => d.status === "ACTIVE").reduce((s, d) => s + d.minimumPayment, 0)), highlight: debts.filter((d) => d.status === "ACTIVE").length > 0, icon: CreditCard },
-                ].map((row, i) => {
-                  const RowIcon = row.icon;
-                  return (
-                    <div key={i} className="flex items-center justify-between px-5 py-4 hover:bg-white/[0.01] transition-colors rounded-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-zinc-500 shrink-0">
-                          <RowIcon className="w-4 h-4" />
-                        </div>
-                        <span className="text-sm font-semibold text-zinc-300">{row.label}</span>
-                      </div>
-                      <span className={cn("text-sm font-black font-mono", row.highlight ? "text-orange-400" : "text-zinc-100")}>
-                        {row.value}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Section>
-          </div>
-
-          {/* Milestones Financieros */}
-          <div>
-            <Section 
-              title="Milestones Financieros"
-            >
-              {milestones.length > 0 ? (
-                <div className="divide-y divide-white/[0.04] p-1.5 space-y-2">
-                  {milestones.map((m) => (
-                    <div key={m.id} className="p-4 group glass-card bg-[#0c0c0e]/40 border-white/[0.02] rounded-xl relative overflow-hidden transition-all duration-300">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-bold text-zinc-200 tracking-tight">{m.name}</p>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
-                            m.status === "REACHED"
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-                              : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                          )}>
-                            {m.status === "REACHED" ? "✓ Alcanzado" : `${m.progress}%`}
+          ) : (
+            /* Layout Business Resumen & Rentabilidad por Producto */
+            <div className="space-y-6">
+              {/* Rentabilidad por Producto */}
+              <Section title="Rentabilidad por Producto">
+                {productSummaries.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1.5">
+                    {productSummaries.map((p) => (
+                      <div
+                        key={p.name}
+                        className="glass-card p-5 bg-[#0c0c0e]/80 border border-white/[0.04] rounded-2xl flex flex-col justify-between space-y-4 hover:border-amber-500/20 transition-all"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-white flex items-center gap-2">
+                            <Tag className="w-4 h-4 text-amber-400" />
+                            {p.name}
                           </span>
-                          <button
-                            onClick={() => openEditMilestone(m)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 active:scale-95"
+                          <span
+                            className={cn(
+                              "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                              p.profit >= 0
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            )}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteItem("milestones", m.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 active:scale-95"
+                            {p.profit >= 0 ? "Rentable" : "Déficit"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+                          <div className="bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <p className="text-[10px] text-zinc-500 font-sans font-semibold">Ingresos</p>
+                            <p className="text-emerald-400 font-bold mt-0.5">+{formatCurrency(p.income)}</p>
+                          </div>
+                          <div className="bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <p className="text-[10px] text-zinc-500 font-sans font-semibold">Gastos</p>
+                            <p className="text-red-400 font-bold mt-0.5">-{formatCurrency(p.expense)}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                          <span className="text-xs text-zinc-400 font-medium">Utilidad Neta</span>
+                          <span
+                            className={cn(
+                              "text-base font-black font-mono",
+                              p.profit >= 0 ? "text-amber-400" : "text-red-400"
+                            )}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            {formatCurrency(p.profit)}
+                          </span>
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <div className="w-full bg-zinc-950 border border-white/5 h-2 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(245,158,11,0.2)]"
-                            style={{ width: `${Math.min(m.progress, 100)}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono">
-                          <span>{formatCurrency(m.currentAmount)}</span>
-                          <span>Meta: {formatCurrency(m.targetAmount)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Target className="w-7 h-7 text-zinc-700 mb-3" />
-                  <p className="text-xs font-semibold text-zinc-400">Sin hitos financieros activos</p>
-                  <p className="text-[10px] text-zinc-500 mt-1">Créalos en la pestaña de Ahorros para ver tu progreso</p>
-                </div>
-              )}
-            </Section>
-          </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-white/5 rounded-2xl bg-[#0c0c0e]/30">
+                    <Tag className="w-8 h-8 text-zinc-600 mb-3" />
+                    <h3 className="text-xs font-bold text-zinc-300">Sin Productos Registrados</h3>
+                    <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">
+                      Asigna un nombre de producto al registrar ingresos o gastos del negocio para visualizar su utilidad individual.
+                    </p>
+                  </div>
+                )}
+              </Section>
+
+              {/* Suscripciones del Negocio */}
+              <Section title="Suscripciones Mensuales del Negocio">
+                {monthlyExpensesList.filter((e) => e.type === "SUSCRIPCION").length > 0 ? (
+                  <div className="divide-y divide-white/[0.04]">
+                    {monthlyExpensesList
+                      .filter((e) => e.type === "SUSCRIPCION")
+                      .map((e) => (
+                        <ListRow
+                          key={e.id}
+                          icon={RefreshCw}
+                          iconColor="text-purple-400 bg-purple-500/10 border-purple-500/20"
+                          title={e.name}
+                          subtitle={`${e.productName ? `Producto: ${e.productName} · ` : ""}Cargo día ${e.chargeDay || "N/A"}`}
+                          right={
+                            <div className="flex items-center gap-3 mr-2 font-mono">
+                              <span
+                                className={cn(
+                                  "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
+                                  (e.subscriptionStatus || "active") === "active"
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                                )}
+                              >
+                                {(e.subscriptionStatus || "active") === "active" ? "Activa" : "Cancelada"}
+                              </span>
+                              <span className="text-sm font-black text-red-400 shrink-0">
+                                -{formatCurrency(e.amount)}
+                              </span>
+                            </div>
+                          }
+                          onEdit={() => openEditExpense(e)}
+                          onDelete={() => deleteItem("expenses", e.id)}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-10 text-center border border-dashed border-white/5 rounded-2xl bg-[#0c0c0e]/30">
+                    <RefreshCw className="w-6 h-6 text-zinc-600 mb-2" />
+                    <p className="text-xs font-semibold text-zinc-400">Sin suscripciones mensuales registradas</p>
+                  </div>
+                )}
+              </Section>
+            </div>
+          )}
         </div>
       )}
 
@@ -855,7 +1195,7 @@ export default function FinanzasPage() {
       ══════════════════════════════════════ */}
       {activeTab === "ingresos" && (
         <Section
-          title="Fuentes de Ingresos Activas"
+          title={financialContext === "BUSINESS" ? "Ingresos del Negocio" : "Fuentes de Ingresos Activas"}
           action={
             <button
               onClick={() => setModal("income")}
@@ -865,9 +1205,9 @@ export default function FinanzasPage() {
             </button>
           }
         >
-          {incomes.length > 0 ? (
+          {monthlyIncomesList.length > 0 ? (
             <div className="divide-y divide-white/[0.04]">
-              {incomes.map((i) => {
+              {monthlyIncomesList.map((i) => {
                 const Icon = getIncomeIcon(i.type);
                 return (
                   <ListRow
@@ -875,7 +1215,7 @@ export default function FinanzasPage() {
                     icon={Icon}
                     iconColor="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     title={i.source}
-                    subtitle={`${i.type} · Cobro ${i.frequency.toLowerCase()} · ${formatCurrency(i.costPerHour)} / hora`}
+                    subtitle={`${i.type}${i.productName ? ` · Producto: ${i.productName}` : ""} · Cobro ${i.frequency.toLowerCase()} · ${formatCurrency(i.costPerHour)} / hora`}
                     right={
                       <span className="text-sm font-black font-mono text-emerald-400 mr-2">
                         {formatCurrency(i.netIncome)}
@@ -908,7 +1248,7 @@ export default function FinanzasPage() {
       ══════════════════════════════════════ */}
       {activeTab === "gastos" && (
         <Section
-          title="Listado de Conceptos de Gastos"
+          title={financialContext === "BUSINESS" ? "Gastos del Negocio" : "Listado de Conceptos de Gastos"}
           action={
             <button
               onClick={() => setModal("expense")}
@@ -918,9 +1258,9 @@ export default function FinanzasPage() {
             </button>
           }
         >
-          {expenses.length > 0 ? (
+          {monthlyExpensesList.length > 0 ? (
             <div className="divide-y divide-white/[0.04]">
-              {expenses.map((e) => {
+              {monthlyExpensesList.map((e) => {
                 const Icon = getExpenseCategoryIcon(e.category);
                 return (
                   <ListRow
@@ -932,9 +1272,21 @@ export default function FinanzasPage() {
                       "text-zinc-400 bg-zinc-500/10 border-white/5"
                     }
                     title={e.name}
-                    subtitle={`${e.category} · Gasto ${e.type.toLowerCase()}${(e.type === "FIJO" || e.type === "SUSCRIPCION") && e.chargeDay ? ` · Cargo día ${e.chargeDay}` : ""}`}
+                    subtitle={`${e.category} · Gasto ${e.type.toLowerCase()}${e.productName ? ` · Producto: ${e.productName}` : ""}${(e.type === "FIJO" || e.type === "SUSCRIPCION") && e.chargeDay ? ` · Cargo día ${e.chargeDay}` : ""}`}
                     right={
                       <div className="flex items-center gap-3 mr-2 font-mono">
+                        {e.type === "SUSCRIPCION" && (
+                          <span
+                            className={cn(
+                              "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
+                              (e.subscriptionStatus || "active") === "active"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            )}
+                          >
+                            {(e.subscriptionStatus || "active") === "active" ? "Activa" : "Cancelada"}
+                          </span>
+                        )}
                         <span className={cn(
                           "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
                           e.type === "FIJO" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
@@ -1205,7 +1557,8 @@ export default function FinanzasPage() {
                     {modal === "income" ? "Ingreso" :
                      modal === "expense" ? "Gasto" :
                      modal === "debt" ? "Parámetro de Deuda" :
-                     modal === "saving" ? "Ciclo de Ahorro" : "Milestone"}
+                     modal === "saving" ? "Ciclo de Ahorro" :
+                     modal === "business_config" ? "Configuración del Negocio" : "Milestone"}
                   </h3>
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Métricas y Parámetros</p>
                 </div>
@@ -1221,6 +1574,43 @@ export default function FinanzasPage() {
             {/* Content Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
               
+              {/* ── Business Config Form ── */}
+              {modal === "business_config" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
+                      Presupuesto / Capital Inicial del Negocio
+                    </label>
+                    <input 
+                      type="number" 
+                      value={bCapitalInput} 
+                      onChange={(e) => setBCapitalInput(e.target.value)} 
+                      placeholder="Ej: 50000" 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                    <p className="text-[11px] text-zinc-500 mt-1.5 leading-normal">
+                      Este es tu presupuesto base. El capital disponible aumentará automáticamente con tus ganancias o disminuirá con tus pérdidas y gastos.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
+                      Costo Promedio por Test de Producto
+                    </label>
+                    <input 
+                      type="number" 
+                      value={bTestCostInput} 
+                      onChange={(e) => setBTestCostInput(e.target.value)} 
+                      placeholder="Ej: 1000" 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                    <p className="text-[11px] text-zinc-500 mt-1.5 leading-normal">
+                      Costo aproximado por cada nuevo producto a testear/lanzar. Servirá para calcular cuántos productos más puedes probar con tu capital actual.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* ── Income Form ── */}
               {modal === "income" && (
                 <div className="space-y-4">
@@ -1229,7 +1619,18 @@ export default function FinanzasPage() {
                     <input 
                       value={iSource} 
                       onChange={(e) => setISource(e.target.value)} 
-                      placeholder="Ej: Sueldo Astra, Proyecto UX" 
+                      placeholder="Ej: Venta de producto, Sueldo, Proyecto UX" 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado (Opcional)</label>
+                    <input 
+                      list="products-suggestions"
+                      value={iProductName} 
+                      onChange={(e) => setIProductName(e.target.value)} 
+                      placeholder="Ej: Moldes para Coser, Postres para Vender" 
                       className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
                     />
                   </div>
@@ -1321,7 +1722,18 @@ export default function FinanzasPage() {
                     <input 
                       value={eName} 
                       onChange={(e) => setEName(e.target.value)} 
-                      placeholder="Ej: Renta de departamento, Netflix..." 
+                      placeholder="Ej: Diseño de anuncios, ChatGPT, Canva..." 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado (Opcional)</label>
+                    <input 
+                      list="products-suggestions"
+                      value={eProductName} 
+                      onChange={(e) => setEProductName(e.target.value)} 
+                      placeholder="Ej: Moldes para Coser, Postres para Vender" 
                       className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
                     />
                   </div>
@@ -1375,6 +1787,38 @@ export default function FinanzasPage() {
                       ))}
                     </div>
                   </div>
+
+                  {eType === "SUSCRIPCION" && (
+                    <div>
+                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Estado de Suscripción</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setESubscriptionStatus("active")}
+                          className={cn(
+                            "py-2 rounded-xl text-xs font-semibold border transition-all",
+                            eSubscriptionStatus === "active"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : "bg-black/30 border-white/[0.04] text-zinc-500"
+                          )}
+                        >
+                          Activa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setESubscriptionStatus("cancelled")}
+                          className={cn(
+                            "py-2 rounded-xl text-xs font-semibold border transition-all",
+                            eSubscriptionStatus === "cancelled"
+                              ? "bg-red-500/10 border-red-500/30 text-red-400"
+                              : "bg-black/30 border-white/[0.04] text-zinc-500"
+                          )}
+                        >
+                          Cancelada
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Styled buttons grid for Expense Category */}
                   <div>
@@ -1567,6 +2011,7 @@ export default function FinanzasPage() {
               </button>
               <button 
                 onClick={
+                  modal === "business_config" ? saveBusinessConfig :
                   modal === "income" ? saveIncome :
                   modal === "expense" ? saveExpense :
                   modal === "debt" ? saveDebt :
@@ -1576,17 +2021,24 @@ export default function FinanzasPage() {
                   modal === "income" ? !iSource.trim() :
                   modal === "expense" ? !eName.trim() :
                   modal === "debt" ? !dEntity.trim() :
+                  modal === "business_config" ? false :
                   modal === "saving" ? false : !mName.trim()
                 } 
                 className="btn-primary pl-4 pr-5 h-11 disabled:opacity-50 disabled:grayscale transition-all duration-300 flex items-center justify-center gap-1.5 rounded-xl text-xs font-black shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:shadow-[0_0_30px_rgba(245,158,11,0.25)]"
               >
                 <Save className="w-4 h-4" />
-                {editingId ? "Guardar Cambios" : "Agregar"}
+                {modal === "business_config" ? "Guardar Configuración" : editingId ? "Guardar Cambios" : "Agregar"}
               </button>
             </div>
           </div>
         </div>
       )}
+      {/* Datalist para autocompletar nombres de productos previamente registrados */}
+      <datalist id="products-suggestions">
+        {productNamesList.map((pName) => (
+          <option key={pName} value={pName} />
+        ))}
+      </datalist>
     </div>
   );
 }
