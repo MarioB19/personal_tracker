@@ -59,7 +59,7 @@ export type ExpenseType = "FIJO" | "VARIABLE" | "SUSCRIPCION";
 
 export type FinancialContext = "PERSONAL" | "BUSINESS";
 
-export type Frequency = "MENSUAL" | "QUINCENAL" | "SEMANAL" | "ANUAL";
+export type Frequency = "MENSUAL" | "QUINCENAL" | "SEMANAL" | "ANUAL" | "UNICO";
 
 export type DebtType =
   | "TARJETA"

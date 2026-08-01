@@ -574,13 +574,26 @@ export default function FinanzasPage() {
     loadData();
   };
 
+  const openCreateIncome = () => {
+    setEditingId(null);
+    setISource("");
+    setIType(financialContext === "BUSINESS" ? "NEGOCIO" : "SALARIO");
+    setIBase("");
+    setIBenefits("");
+    setIFreq(financialContext === "BUSINESS" ? "UNICO" : "MENSUAL");
+    setIHours("160");
+    setIProductId("");
+    setIProductName("");
+    setModal("income");
+  };
+
   const openEditIncome = (i: Income) => {
     setEditingId(i.id);
     setISource(i.source);
     setIType(i.type);
     setIBase(i.baseSalary.toString());
     setIBenefits(i.benefits.toString());
-    setIFreq(i.frequency);
+    setIFreq(i.frequency || (financialContext === "BUSINESS" ? "UNICO" : "MENSUAL"));
     setIHours(i.hoursPerMonth?.toString() || "160");
     setIProductId(i.productId || "");
     setIProductName(i.productName || "");
@@ -630,24 +643,24 @@ export default function FinanzasPage() {
 
   const saveIncome = async () => {
     if (!uid || !iSource.trim()) return;
-    const base = Number(iBase) || 0;
-    const benefits = Number(iBenefits) || 0;
-    const net = base + benefits;
-    const hours = Number(iHours) || 160;
-
     const existingItem = editingId ? incomes.find((item) => item.id === editingId) : null;
     const targetCtx = existingItem?.financialContext || financialContext;
+
+    const base = Number(iBase) || 0;
+    const benefits = targetCtx === "BUSINESS" ? 0 : Number(iBenefits) || 0;
+    const net = base + benefits;
+    const hours = targetCtx === "BUSINESS" ? 0 : Number(iHours) || 160;
 
     const selectedProd = products.find((p) => p.id === iProductId);
     const finalProdName = selectedProd ? selectedProd.name : iProductName.trim();
 
     const payload = {
-      source: iSource,
-      type: iType,
+      source: iSource.trim(),
+      type: targetCtx === "BUSINESS" ? ("NEGOCIO" as IncomeType) : iType,
       baseSalary: base,
       benefits,
       netIncome: net,
-      frequency: iFreq,
+      frequency: iFreq || (targetCtx === "BUSINESS" ? "UNICO" : "MENSUAL"),
       hoursPerMonth: hours,
       costPerHour: hours > 0 ? Math.round(net / hours) : 0,
       month: currentMonth,
@@ -664,7 +677,14 @@ export default function FinanzasPage() {
   };
 
   const resetIncomeForm = () => {
-    setISource(""); setIType("SALARIO"); setIBase(""); setIBenefits(""); setIFreq("MENSUAL"); setIHours("160"); setIProductId(""); setIProductName("");
+    setISource("");
+    setIType(financialContext === "BUSINESS" ? "NEGOCIO" : "SALARIO");
+    setIBase("");
+    setIBenefits("");
+    setIFreq(financialContext === "BUSINESS" ? "UNICO" : "MENSUAL");
+    setIHours("160");
+    setIProductId("");
+    setIProductName("");
   };
 
   const saveExpense = async () => {
@@ -1272,7 +1292,7 @@ export default function FinanzasPage() {
           title={financialContext === "BUSINESS" ? "Ingresos del Negocio" : "Fuentes de Ingresos Activas"}
           action={
             <button
-              onClick={() => setModal("income")}
+              onClick={openCreateIncome}
               className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
             >
               <Plus className="w-4 h-4" /> Agregar Ingreso
@@ -1289,7 +1309,7 @@ export default function FinanzasPage() {
                     icon={Icon}
                     iconColor="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     title={i.source}
-                    subtitle={`${i.type}${i.productName ? ` · Producto: ${i.productName}` : ""} · Cobro ${i.frequency.toLowerCase()} · ${formatCurrency(i.costPerHour)} / hora`}
+                    subtitle={`${i.type}${i.productName ? ` · Producto: ${i.productName}` : ""} · Cobro ${i.frequency.toLowerCase()}${i.costPerHour > 0 ? ` · ${formatCurrency(i.costPerHour)} / hora` : ""}`}
                     right={
                       <span className="text-sm font-black font-mono text-emerald-400 mr-2">
                         {formatCurrency(i.netIncome)}
@@ -1307,7 +1327,7 @@ export default function FinanzasPage() {
               <h3 className="text-xs font-bold text-zinc-300">Sin Ingresos Registrados</h3>
               <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">Registra tu sueldo, proyectos freelance o ganancias de negocio para modelar tu presupuesto.</p>
               <button
-                onClick={() => setModal("income")}
+                onClick={openCreateIncome}
                 className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs"
               >
                 + Registrar Primer Ingreso
@@ -1852,124 +1872,170 @@ export default function FinanzasPage() {
               {/* ── Income Form ── */}
               {modal === "income" && (
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fuente / Empresa / Cliente</label>
-                    <input 
-                      value={iSource} 
-                      onChange={(e) => setISource(e.target.value)} 
-                      placeholder="Ej: Venta de producto, Sueldo, Proyecto UX" 
-                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
-                  </div>
+                  {financialContext === "BUSINESS" ? (
+                    <>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
+                          Concepto de Venta / Cliente
+                        </label>
+                        <input 
+                          value={iSource} 
+                          onChange={(e) => setISource(e.target.value)} 
+                          placeholder="Ej: Venta de 2 paquetes, Cliente Juan Pérez" 
+                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado</label>
-                    {products.length > 0 ? (
-                      <select
-                        value={iProductId}
-                        onChange={(e) => {
-                          const pid = e.target.value;
-                          setIProductId(pid);
-                          const sel = products.find((p) => p.id === pid);
-                          if (sel) setIProductName(sel.name);
-                          else if (!pid) setIProductName("");
-                        }}
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
-                      >
-                        <option value="" className="bg-zinc-900">-- Ningún producto asignado --</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id} className="bg-zinc-900">
-                            {p.name} {p.status === "testing" ? "(En Testeo)" : p.status === "archived" ? "(Archivado)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input 
-                        list="products-suggestions"
-                        value={iProductName} 
-                        onChange={(e) => setIProductName(e.target.value)} 
-                        placeholder="Ej: Moldes para Coser, Postres para Vender" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Frecuencia de Cobro</label>
-                      <select 
-                        value={iFreq} 
-                        onChange={(e) => setIFreq(e.target.value as Frequency)} 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
-                      >
-                        {(["MENSUAL", "QUINCENAL", "SEMANAL", "ANUAL"] as Frequency[]).map((f) => (
-                          <option key={f} value={f} className="bg-zinc-900">{f.toLowerCase()}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Horas Laborales / Mes</label>
-                      <input 
-                        type="number" 
-                        value={iHours} 
-                        onChange={(e) => setIHours(e.target.value)} 
-                        placeholder="160" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Dynamic styled buttons for Income type */}
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Tipo de Ingreso</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                      {(["SALARIO", "FREELANCE", "NEGOCIO", "INVERSION", "OTRO"] as IncomeType[]).map((t) => {
-                        const Icon = getIncomeIcon(t);
-                        const isSelected = iType === t;
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setIType(t)}
-                            className={cn(
-                              "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95",
-                              isSelected 
-                                ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
-                                : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
-                            )}
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Producto Relacionado</label>
+                        {products.length > 0 ? (
+                          <select
+                            value={iProductId}
+                            onChange={(e) => {
+                              const pid = e.target.value;
+                              setIProductId(pid);
+                              const sel = products.find((p) => p.id === pid);
+                              if (sel) setIProductName(sel.name);
+                              else if (!pid) setIProductName("");
+                            }}
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
                           >
-                            <Icon className="w-4 h-4 mb-1" />
-                            <span className="capitalize">{t.toLowerCase()}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                            <option value="" className="bg-zinc-900">-- Ningún producto asignado (Venta General) --</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id} className="bg-zinc-900">
+                                {p.name} {p.status === "testing" ? "(En Testeo)" : p.status === "archived" ? "(Archivado)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input 
+                            list="products-suggestions"
+                            value={iProductName} 
+                            onChange={(e) => setIProductName(e.target.value)} 
+                            placeholder="Ej: Moldes para Coser, Postres para Vender" 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          />
+                        )}
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Sueldo / Pago Base</label>
-                      <input 
-                        type="number" 
-                        value={iBase} 
-                        onChange={(e) => setIBase(e.target.value)} 
-                        placeholder="0" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Bonos / Prestaciones</label>
-                      <input 
-                        type="number" 
-                        value={iBenefits} 
-                        onChange={(e) => setIBenefits(e.target.value)} 
-                        placeholder="0" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Tipo de Cobro / Frecuencia</label>
+                          <select 
+                            value={iFreq} 
+                            onChange={(e) => setIFreq(e.target.value as Frequency)} 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                          >
+                            <option value="UNICO" className="bg-zinc-900">Pago Único (Venta Directa)</option>
+                            <option value="MENSUAL" className="bg-zinc-900">Recurrente Mensual (Suscripción)</option>
+                            <option value="QUINCENAL" className="bg-zinc-900">Quincenal</option>
+                            <option value="SEMANAL" className="bg-zinc-900">Semanal</option>
+                            <option value="ANUAL" className="bg-zinc-900">Anual</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto del Ingreso</label>
+                          <input 
+                            type="number" 
+                            value={iBase} 
+                            onChange={(e) => setIBase(e.target.value)} 
+                            placeholder="0" 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fuente / Empresa / Cliente</label>
+                        <input 
+                          value={iSource} 
+                          onChange={(e) => setISource(e.target.value)} 
+                          placeholder="Ej: Sueldo, Proyecto UX" 
+                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Frecuencia de Cobro</label>
+                          <select 
+                            value={iFreq} 
+                            onChange={(e) => setIFreq(e.target.value as Frequency)} 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                          >
+                            {(["MENSUAL", "QUINCENAL", "SEMANAL", "ANUAL"] as Frequency[]).map((f) => (
+                              <option key={f} value={f} className="bg-zinc-900">{f.toLowerCase()}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Horas Laborales / Mes</label>
+                          <input 
+                            type="number" 
+                            value={iHours} 
+                            onChange={(e) => setIHours(e.target.value)} 
+                            placeholder="160" 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Dynamic styled buttons for Income type */}
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Tipo de Ingreso</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          {(["SALARIO", "FREELANCE", "NEGOCIO", "INVERSION", "OTRO"] as IncomeType[]).map((t) => {
+                            const Icon = getIncomeIcon(t);
+                            const isSelected = iType === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setIType(t)}
+                                className={cn(
+                                  "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95",
+                                  isSelected 
+                                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
+                                    : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
+                                )}
+                              >
+                                <Icon className="w-4 h-4 mb-1" />
+                                <span className="capitalize">{t.toLowerCase()}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Sueldo / Pago Base</label>
+                          <input 
+                            type="number" 
+                            value={iBase} 
+                            onChange={(e) => setIBase(e.target.value)} 
+                            placeholder="0" 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Bonos / Prestaciones</label>
+                          <input 
+                            type="number" 
+                            value={iBenefits} 
+                            onChange={(e) => setIBenefits(e.target.value)} 
+                            placeholder="0" 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
