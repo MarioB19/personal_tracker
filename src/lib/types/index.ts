@@ -171,6 +171,7 @@ export interface Product {
   name: string;
   description?: string;
   status?: "testing" | "active" | "archived";
+  createdDate?: string; // YYYY-MM-DD
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -187,6 +188,7 @@ export interface Income {
   hoursPerMonth: number;
   costPerHour: number;
   month: string;
+  date?: string; // YYYY-MM-DD
   financialContext?: FinancialContext;
   productId?: string;
   productName?: string;
@@ -205,6 +207,7 @@ export interface Expense {
   frequency: Frequency;
   chargeDay?: number; // Día del mes para gastos fijos
   month: string;
+  date?: string; // YYYY-MM-DD
   isNecessity: boolean;
   financialContext?: FinancialContext;
   productId?: string;

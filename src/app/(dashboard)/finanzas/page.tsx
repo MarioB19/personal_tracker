@@ -268,6 +268,7 @@ export default function FinanzasPage() {
   const [pName, setPName] = useState("");
   const [pDescription, setPDescription] = useState("");
   const [pStatus, setPStatus] = useState<"testing" | "active" | "archived">("testing");
+  const [pDate, setPDate] = useState("");
 
   // ── Income form ──
   const [iSource, setISource] = useState("");
@@ -278,6 +279,7 @@ export default function FinanzasPage() {
   const [iHours, setIHours] = useState("160");
   const [iProductId, setIProductId] = useState("");
   const [iProductName, setIProductName] = useState("");
+  const [iDate, setIDate] = useState("");
 
   // ── Expense form ──
   const [eName, setEName] = useState("");
@@ -288,6 +290,7 @@ export default function FinanzasPage() {
   const [eProductId, setEProductId] = useState("");
   const [eProductName, setEProductName] = useState("");
   const [eSubscriptionStatus, setESubscriptionStatus] = useState<"active" | "cancelled">("active");
+  const [eDate, setEDate] = useState("");
 
   // ── Debt form ──
   const [dEntity, setDEntity] = useState("");
@@ -541,6 +544,7 @@ export default function FinanzasPage() {
     setPName("");
     setPDescription("");
     setPStatus("testing");
+    setPDate(new Date().toISOString().split("T")[0]);
     setModal("product");
   };
 
@@ -549,6 +553,7 @@ export default function FinanzasPage() {
     setPName(p.name);
     setPDescription(p.description || "");
     setPStatus(p.status || "testing");
+    setPDate(p.createdDate || (p.createdAt?.toDate ? p.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0]));
     setModal("product");
   };
 
@@ -558,6 +563,7 @@ export default function FinanzasPage() {
       name: pName.trim(),
       description: pDescription.trim(),
       status: pStatus,
+      createdDate: pDate || new Date().toISOString().split("T")[0],
     };
     if (editingId) {
       await updateFinance(uid, "products", editingId, payload);
@@ -584,6 +590,7 @@ export default function FinanzasPage() {
     setIHours("0");
     setIProductId(p.id);
     setIProductName(p.name);
+    setIDate(new Date().toISOString().split("T")[0]);
     setModal("income");
   };
 
@@ -597,6 +604,7 @@ export default function FinanzasPage() {
     setEProductId(p.id);
     setEProductName(p.name);
     setESubscriptionStatus("active");
+    setEDate(new Date().toISOString().split("T")[0]);
     setModal("expense");
   };
 
@@ -610,6 +618,7 @@ export default function FinanzasPage() {
     setIHours("160");
     setIProductId("");
     setIProductName("");
+    setIDate(new Date().toISOString().split("T")[0]);
     setModal("income");
   };
 
@@ -623,6 +632,7 @@ export default function FinanzasPage() {
     setIHours(i.hoursPerMonth?.toString() || "160");
     setIProductId(i.productId || "");
     setIProductName(i.productName || "");
+    setIDate(i.date || (i.createdAt?.toDate ? i.createdAt.toDate().toISOString().split("T")[0] : `${i.month}-01`));
     setModal("income");
   };
 
@@ -636,6 +646,7 @@ export default function FinanzasPage() {
     setEProductId(e.productId || "");
     setEProductName(e.productName || "");
     setESubscriptionStatus(e.subscriptionStatus || "active");
+    setEDate(e.date || (e.createdAt?.toDate ? e.createdAt.toDate().toISOString().split("T")[0] : `${e.month}-01`));
     setModal("expense");
   };
 
@@ -679,6 +690,7 @@ export default function FinanzasPage() {
 
     const selectedProd = products.find((p) => p.id === iProductId);
     const finalProdName = selectedProd ? selectedProd.name : iProductName.trim();
+    const finalDate = iDate || new Date().toISOString().split("T")[0];
 
     const payload = {
       source: iSource.trim(),
@@ -689,7 +701,8 @@ export default function FinanzasPage() {
       frequency: iFreq || (targetCtx === "BUSINESS" ? "UNICO" : "MENSUAL"),
       hoursPerMonth: hours,
       costPerHour: hours > 0 ? Math.round(net / hours) : 0,
-      month: currentMonth,
+      month: finalDate.slice(0, 7),
+      date: finalDate,
       financialContext: targetCtx,
       productId: iProductId || undefined,
       productName: finalProdName || undefined,
@@ -711,6 +724,7 @@ export default function FinanzasPage() {
     setIHours("160");
     setIProductId("");
     setIProductName("");
+    setIDate(new Date().toISOString().split("T")[0]);
   };
 
   const saveExpense = async () => {
@@ -720,6 +734,7 @@ export default function FinanzasPage() {
 
     const selectedProd = products.find((p) => p.id === eProductId);
     const finalProdName = selectedProd ? selectedProd.name : eProductName.trim();
+    const finalDate = eDate || new Date().toISOString().split("T")[0];
 
     const payload = {
       name: eName,
@@ -728,7 +743,8 @@ export default function FinanzasPage() {
       type: eType,
       frequency: "MENSUAL" as Frequency,
       chargeDay: (eType === "SUSCRIPCION" || eType === "FIJO") && eChargeDay ? Number(eChargeDay) : undefined,
-      month: currentMonth,
+      month: finalDate.slice(0, 7),
+      date: finalDate,
       isNecessity: true,
       financialContext: targetCtx,
       productId: eProductId || undefined,
@@ -744,7 +760,7 @@ export default function FinanzasPage() {
   };
 
   const resetExpenseForm = () => {
-    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductId(""); setEProductName(""); setESubscriptionStatus("active");
+    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductId(""); setEProductName(""); setESubscriptionStatus("active"); setEDate(new Date().toISOString().split("T")[0]);
   };
 
   const saveDebt = async () => {
@@ -1335,7 +1351,7 @@ export default function FinanzasPage() {
                     icon={Icon}
                     iconColor="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     title={i.source}
-                    subtitle={`${i.type}${i.productName ? ` · Producto: ${i.productName}` : ""} · Cobro ${i.frequency.toLowerCase()}${i.costPerHour > 0 ? ` · ${formatCurrency(i.costPerHour)} / hora` : ""}`}
+                    subtitle={`${i.type}${i.productName ? ` · Producto: ${i.productName}` : ""}${i.date ? ` · Fecha: ${i.date}` : ""} · Cobro ${i.frequency.toLowerCase()}${i.costPerHour > 0 ? ` · ${formatCurrency(i.costPerHour)} / hora` : ""}`}
                     right={
                       <span className="text-sm font-black font-mono text-emerald-400 mr-2">
                         {formatCurrency(i.netIncome)}
@@ -1701,6 +1717,12 @@ export default function FinanzasPage() {
                           {p.description}
                         </p>
                       )}
+                      {(p.createdDate || p.createdAt) && (
+                        <div className="flex items-center gap-1 mt-2 text-[10px] text-zinc-500 font-mono">
+                          <Calendar className="w-3 h-3 text-amber-500/70" />
+                          <span>Lanzamiento: {p.createdDate || (p.createdAt?.toDate ? p.createdAt.toDate().toISOString().split("T")[0] : "")}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/[0.04] font-mono text-center">
@@ -1853,6 +1875,16 @@ export default function FinanzasPage() {
                   </div>
 
                   <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fecha de Lanzamiento / Registro</label>
+                    <input 
+                      type="date" 
+                      value={pDate} 
+                      onChange={(e) => setPDate(e.target.value)} 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Estado del Producto</label>
                     <div className="grid grid-cols-3 gap-2">
                       {[
@@ -1967,6 +1999,16 @@ export default function FinanzasPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fecha del Ingreso</label>
+                          <input 
+                            type="date" 
+                            value={iDate} 
+                            onChange={(e) => setIDate(e.target.value)} 
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
+                          />
+                        </div>
+
+                        <div>
                           <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Tipo de Cobro / Frecuencia</label>
                           <select 
                             value={iFreq} 
@@ -1980,17 +2022,17 @@ export default function FinanzasPage() {
                             <option value="ANUAL" className="bg-zinc-900">Anual</option>
                           </select>
                         </div>
+                      </div>
 
-                        <div>
-                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto del Ingreso</label>
-                          <input 
-                            type="number" 
-                            value={iBase} 
-                            onChange={(e) => setIBase(e.target.value)} 
-                            placeholder="0" 
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                          />
-                        </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto del Ingreso</label>
+                        <input 
+                          type="number" 
+                          value={iBase} 
+                          onChange={(e) => setIBase(e.target.value)} 
+                          placeholder="0" 
+                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                        />
                       </div>
                     </>
                   ) : (
@@ -2133,6 +2175,16 @@ export default function FinanzasPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
+                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fecha del Gasto</label>
+                      <input 
+                        type="date" 
+                        value={eDate} 
+                        onChange={(e) => setEDate(e.target.value)} 
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
+                      />
+                    </div>
+
+                    <div>
                       <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto de Gasto</label>
                       <input 
                         type="number" 
@@ -2142,22 +2194,22 @@ export default function FinanzasPage() {
                         className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
                       />
                     </div>
-
-                    {(eType === "SUSCRIPCION" || eType === "FIJO") && (
-                      <div>
-                        <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Día de Cobro en el Mes</label>
-                        <input 
-                          type="number" 
-                          min={1} 
-                          max={31} 
-                          value={eChargeDay} 
-                          onChange={(e) => setEChargeDay(e.target.value)} 
-                          placeholder="Ej. 19" 
-                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                        />
-                      </div>
-                    )}
                   </div>
+
+                  {(eType === "SUSCRIPCION" || eType === "FIJO") && (
+                    <div>
+                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Día de Cobro en el Mes</label>
+                      <input 
+                        type="number" 
+                        min={1} 
+                        max={31} 
+                        value={eChargeDay} 
+                        onChange={(e) => setEChargeDay(e.target.value)} 
+                        placeholder="Ej. 19" 
+                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                      />
+                    </div>
+                  )}
 
                   {/* Styled buttons for Expense type */}
                   <div>
