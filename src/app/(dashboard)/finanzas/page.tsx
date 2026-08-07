@@ -978,129 +978,90 @@ export default function FinanzasPage() {
         </div>
       </div>
 
-      {/* ── Stats Grid (Premium SaaS aesthetics) ────────────────── */}
-      {financialContext === "PERSONAL" ? (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-          <StatCard
-            icon={TrendingUp}
-            label="Ingresos Mensuales"
-            value={formatCurrency(totalIncome)}
-            sub={monthlyIncomesList.length > 0 ? `${monthlyIncomesList.length} fuente${monthlyIncomesList.length > 1 ? "s" : ""}` : "Sin ingresos"}
-            color="emerald"
-          />
-          <StatCard
-            icon={TrendingDown}
-            label="Gastos Mensuales"
-            value={formatCurrency(totalExpenses)}
-            sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""}` : "Sin gastos"}
-            color="red"
-          />
-          <StatCard
-            icon={Wallet}
-            label="Balance Neto"
-            value={formatCurrency(netBalance)}
-            sub={`Tasa de Ahorro: ${savingsRate}%`}
-            color={netBalance >= 0 ? "amber" : "red"}
-          />
-          <StatCard
-            icon={CreditCard}
-            label="Deuda Activa"
-            value={formatCurrency(totalDebt)}
-            sub={debts.filter((d) => d.status === "ACTIVE").length > 0
-              ? `${debts.filter((d) => d.status === "ACTIVE").length} deuda${debts.filter((d) => d.status === "ACTIVE").length > 1 ? "s" : ""}`
-              : "Libre de deudas"}
-            color="orange"
-          />
-          <StatCard
-            icon={PiggyBank}
-            label="Total Ahorrado"
-            value={formatCurrency(totalSaved)}
-            sub={avgCostPerHour > 0 ? `${formatCurrency(avgCostPerHour)}/hr` : "Sin salario base"}
-            color="blue"
-          />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-          <StatCard
-            icon={Wallet}
-            label="Presupuesto Disponible"
-            value={formatCurrency(currentBusinessCapital)}
-            sub={
-              initialBusinessCapital > 0
-                ? `Base: ${formatCurrency(initialBusinessCapital)}`
-                : "Definir capital base"
-            }
-            color={currentBusinessCapital >= 0 ? "emerald" : "red"}
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="Ingresos Totales del Mes"
-            value={formatCurrency(totalIncome)}
-            sub={`${monthlyIncomesList.length} ingreso${monthlyIncomesList.length !== 1 ? "s" : ""}`}
-            color="emerald"
-          />
-          <StatCard
-            icon={TrendingDown}
-            label="Gastos Totales del Mes"
-            value={formatCurrency(totalExpenses)}
-            sub={`Suscripciones: ${formatCurrency(monthlySubscriptions)}`}
-            color="red"
-          />
-          <StatCard
-            icon={Calendar}
-            label="Runway Estimado"
-            value={
-              runwayMonths === null
-                ? "Sostenible"
-                : `${runwayMonths.toFixed(1)} meses`
-            }
-            sub={
-              burnRate > 0
-                ? `Burn rate: -${formatCurrency(burnRate)}/mes`
-                : "Sin pérdidas netas"
-            }
-            color={runwayMonths === null || runwayMonths >= 6 ? "blue" : "orange"}
-          />
-          <StatCard
-            icon={Package}
-            label="Testeo de Productos"
-            value={`~${possibleTests} producto${possibleTests !== 1 ? "s" : ""}`}
-            sub={`Costo test: ${formatCurrency(testCost)}`}
-            color="amber"
-          />
-        </div>
-      )}
-
-      {/* ── Tabs (Premium pill container) ──────────────────── */}
-      <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200",
-              activeTab === tab.key
-                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.06)]"
-                : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
-            )}
-          >
-            <tab.icon className="w-3.5 h-3.5 shrink-0" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ══════════════════════════════════════
-          TAB: HEALTH CHECK INFOPRODUCTOS
-      ══════════════════════════════════════ */}
-      {activeTab === "health-check" && (
+      {/* ── Visual Context Content ────────────────── */}
+      {financialContext === "BUSINESS" ? (
         <InfoproductHealthCheck
           userId={uid || ""}
           ops={infoproductOps}
           fixedExpenses={infoproductFixedExpenses}
+          initialBusinessCapital={initialBusinessCapital}
+          productTestCost={productTestCost}
+          onSaveBusinessConfig={async (cap, tCost) => {
+            if (!uid) return;
+            setInitialBusinessCapital(cap);
+            setProductTestCost(tCost);
+            await setDoc(
+              doc(db, "users", uid, "finance", "business_config"),
+              { initialBusinessCapital: cap, productTestCost: tCost },
+              { merge: true }
+            );
+          }}
           onRefresh={loadData}
         />
+      ) : (
+        <>
+          {/* Stats Grid Personal */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <StatCard
+              icon={TrendingUp}
+              label="Ingresos Mensuales"
+              value={formatCurrency(totalIncome)}
+              sub={monthlyIncomesList.length > 0 ? `${monthlyIncomesList.length} fuente${monthlyIncomesList.length > 1 ? "s" : ""}` : "Sin ingresos"}
+              color="emerald"
+            />
+            <StatCard
+              icon={TrendingDown}
+              label="Gastos Mensuales"
+              value={formatCurrency(totalExpenses)}
+              sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""}` : "Sin gastos"}
+              color="red"
+            />
+            <StatCard
+              icon={Wallet}
+              label="Balance Neto"
+              value={formatCurrency(netBalance)}
+              sub={`Tasa de Ahorro: ${savingsRate}%`}
+              color={netBalance >= 0 ? "amber" : "red"}
+            />
+            <StatCard
+              icon={CreditCard}
+              label="Deuda Activa"
+              value={formatCurrency(totalDebt)}
+              sub={debts.filter((d) => d.status === "ACTIVE").length > 0
+                ? `${debts.filter((d) => d.status === "ACTIVE").length} deuda${debts.filter((d) => d.status === "ACTIVE").length > 1 ? "s" : ""}`
+                : "Libre de deudas"}
+              color="orange"
+            />
+            <StatCard
+              icon={PiggyBank}
+              label="Total Ahorrado"
+              value={formatCurrency(totalSaved)}
+              sub={avgCostPerHour > 0 ? `${formatCurrency(avgCostPerHour)}/hr` : "Sin salario base"}
+              color="blue"
+            />
+          </div>
+
+          {/* Tabs Personal */}
+          <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200",
+                  activeTab === tab.key
+                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.06)]"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
+                )}
+              >
+                <tab.icon className="w-3.5 h-3.5 shrink-0" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
+
 
       {/* ══════════════════════════════════════
           TAB: RESUMEN
