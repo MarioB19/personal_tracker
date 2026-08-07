@@ -176,6 +176,28 @@ export interface Product {
   updatedAt: Timestamp;
 }
 
+export interface InfoproductOp {
+  id: string;
+  userId: string;
+  month: string; // YYYY-MM (ej. "2026-08")
+  productName: string;
+  adSpend: number;
+  revenue: number;
+  salesCount?: number;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface InfoproductFixedExpense {
+  id: string;
+  userId: string;
+  month: string; // YYYY-MM (ej. "2026-08")
+  concept: string;
+  amount: number;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 export interface Income {
   id: string;
   userId: string;

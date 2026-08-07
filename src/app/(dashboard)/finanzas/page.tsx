@@ -23,6 +23,8 @@ import {
   FinancialContext,
   Frequency,
   DebtType,
+  InfoproductOp,
+  InfoproductFixedExpense,
 } from "@/lib/types";
 import {
   Wallet,
@@ -60,11 +62,13 @@ import {
   Package,
   Store,
   Layers,
-  ShoppingBag
+  ShoppingBag,
+  ShieldCheck,
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import InfoproductHealthCheck from "@/components/finanzas/InfoproductHealthCheck";
 
-type TabType = "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
+type TabType = "health-check" | "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
 
 // Helper functions for RPG/Gaming financial aesthetics
 const getIncomeIcon = (type: IncomeType) => {
@@ -243,6 +247,8 @@ export default function FinanzasPage() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [savings, setSavings] = useState<Saving[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [infoproductOps, setInfoproductOps] = useState<InfoproductOp[]>([]);
+  const [infoproductFixedExpenses, setInfoproductFixedExpenses] = useState<InfoproductFixedExpense[]>([]);
   const [initialSavings, setInitialSavings] = useState<number>(0);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -393,20 +399,25 @@ export default function FinanzasPage() {
       setBTestCostInput(tCost.toString());
     }
 
-    const [i, e, d, prods] = await Promise.all([
+    const [i, e, d, prods, iOps, iFixed] = await Promise.all([
       getAllFinance<Income>(uid, "income"),
       getAllFinance<Expense>(uid, "expenses"),
       getAllFinance<Debt>(uid, "debts"),
       getAllFinance<Product>(uid, "products"),
+      getAllFinance<InfoproductOp>(uid, "infoproduct_ops"),
+      getAllFinance<InfoproductFixedExpense>(uid, "infoproduct_fixed_expenses"),
     ]);
     setIncomes(i);
     setExpenses(e);
     setDebts(d);
     setProducts(prods);
+    setInfoproductOps(iOps);
+    setInfoproductFixedExpenses(iFixed);
     setSavings(synSavings);
     setMilestones(synMilestones);
     setLoading(false);
   }, [uid]);
+
 
   useEffect(() => {
     if (uid) loadData();
@@ -445,11 +456,18 @@ export default function FinanzasPage() {
     .filter((e) => e.type === "SUSCRIPCION" && (e.subscriptionStatus || "active") !== "cancelled")
     .reduce((s, e) => s + e.amount, 0);
 
-  const totalIncome = monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
+  const totalInfoproductRevenue = infoproductOps.reduce((s, o) => s + (o.revenue || 0), 0);
+  const totalInfoproductAdSpend = infoproductOps.reduce((s, o) => s + (o.adSpend || 0), 0);
+  const totalInfoproductFixed = infoproductFixedExpenses.reduce((s, f) => s + (f.amount || 0), 0);
+
+  const totalIncome =
+    financialContext === "BUSINESS"
+      ? monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0) + totalInfoproductRevenue
+      : monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
 
   const totalExpenses =
     financialContext === "BUSINESS"
-      ? productExpenses + monthlySubscriptions
+      ? productExpenses + monthlySubscriptions + totalInfoproductAdSpend + totalInfoproductFixed
       : monthlyExpensesList.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
 
   const netBalance = totalIncome - totalExpenses;
@@ -877,7 +895,9 @@ export default function FinanzasPage() {
 
   const switchContext = (ctx: FinancialContext) => {
     setFinancialContext(ctx);
-    if (ctx === "BUSINESS" && (activeTab === "deudas" || activeTab === "ahorros")) {
+    if (ctx === "BUSINESS") {
+      setActiveTab("health-check");
+    } else {
       setActiveTab("resumen");
     }
   };
@@ -885,6 +905,7 @@ export default function FinanzasPage() {
   const tabs: { key: TabType; label: string; icon: React.ElementType }[] =
     financialContext === "BUSINESS"
       ? [
+          { key: "health-check", label: "Health Check 🟢", icon: ShieldCheck },
           { key: "resumen", label: "Resumen", icon: Wallet },
           { key: "ingresos", label: "Ingresos", icon: TrendingUp },
           { key: "gastos", label: "Gastos", icon: TrendingDown },
@@ -1070,9 +1091,22 @@ export default function FinanzasPage() {
       </div>
 
       {/* ══════════════════════════════════════
+          TAB: HEALTH CHECK INFOPRODUCTOS
+      ══════════════════════════════════════ */}
+      {activeTab === "health-check" && (
+        <InfoproductHealthCheck
+          userId={uid || ""}
+          ops={infoproductOps}
+          fixedExpenses={infoproductFixedExpenses}
+          onRefresh={loadData}
+        />
+      )}
+
+      {/* ══════════════════════════════════════
           TAB: RESUMEN
       ══════════════════════════════════════ */}
       {activeTab === "resumen" && (
+
         <div className="space-y-6">
           {financialContext === "PERSONAL" ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
