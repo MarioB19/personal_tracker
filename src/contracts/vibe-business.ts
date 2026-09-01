@@ -1,7 +1,16 @@
 import { z } from "zod";
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return (
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === value
+    );
+  }, "La fecha no existe");
 const nullableNonNegative = z.number().nonnegative().nullable();
 
 const validationGateSchema = z
@@ -17,7 +26,14 @@ const validationGateSchema = z
 
 export const vibeBusinessProductSchema = z
   .object({
-    productId: z.string().min(1).max(160),
+    productId: z
+      .string()
+      .min(1)
+      .max(160)
+      .regex(
+        /^[^\u0000-\u001F\u007F]+$/,
+        "productId no puede contener caracteres de control",
+      ),
     name: z.string().min(1).max(180),
     track: z.enum(["WHATSAPP", "LANDING", "UNCLASSIFIED"]),
     accountCount: z.number().int().nonnegative(),
@@ -116,6 +132,30 @@ export const vibeBusinessSummarySchema = z
   })
   .strict()
   .superRefine((payload, ctx) => {
+    const seenProductIds = new Set<string>();
+    payload.products.forEach((product, index) => {
+      if (seenProductIds.has(product.productId)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "productId debe ser único dentro del cierre",
+          path: ["products", index, "productId"],
+        });
+      }
+      seenProductIds.add(product.productId);
+    });
+
+    const seenCheckCodes = new Set<string>();
+    payload.quality.checks.forEach((check, index) => {
+      if (seenCheckCodes.has(check.code)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Cada check de calidad debe aparecer una sola vez",
+          path: ["quality", "checks", index, "code"],
+        });
+      }
+      seenCheckCodes.add(check.code);
+    });
+
     if (
       !payload.period.start.startsWith(`${payload.period.month}-`) ||
       !payload.period.end.startsWith(`${payload.period.month}-`)
@@ -125,6 +165,32 @@ export const vibeBusinessSummarySchema = z
         message: "El rango no corresponde al mes declarado",
         path: ["period"],
       });
+    }
+
+    if (payload.period.start > payload.period.end) {
+      ctx.addIssue({
+        code: "custom",
+        message: "El inicio del periodo no puede ser posterior al cierre",
+        path: ["period"],
+      });
+    }
+
+    if (payload.status === "FINAL") {
+      const [year, month] = payload.period.month.split("-").map(Number);
+      const expectedStart = `${payload.period.month}-01`;
+      const expectedEnd = new Date(Date.UTC(year, month, 0))
+        .toISOString()
+        .slice(0, 10);
+      if (
+        payload.period.start !== expectedStart ||
+        payload.period.end !== expectedEnd
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Un cierre FINAL debe cubrir el mes calendario completo",
+          path: ["period"],
+        });
+      }
     }
 
     const totals = payload.products.reduce(

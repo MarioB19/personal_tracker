@@ -70,10 +70,11 @@ export async function POST(request: Request) {
     return apiSuccess(
       {
         replayed: result.replayed,
+        deduplicated: result.deduplicated,
         expense: serializeForApi(result.expense),
       },
       requestId,
-      result.replayed ? 200 : 201,
+      result.replayed || result.deduplicated ? 200 : 201,
     );
   } catch (error) {
     if (error instanceof IdempotencyConflictError) {

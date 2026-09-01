@@ -146,5 +146,11 @@ export async function fetchVibeBusinessSummary(
       "La respuesta de Vibe no cumple el contrato esperado",
     );
   }
+  if (parsed.data.period.month !== month) {
+    throw new VibeIntegrationError(
+      "VIBE_PERIOD_MISMATCH",
+      "Vibe devolvió un periodo distinto al solicitado",
+    );
+  }
   return parsed.data;
 }

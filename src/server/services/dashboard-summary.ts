@@ -7,6 +7,7 @@ import type {
   Mission,
   TimeBlock,
 } from "@/lib/types";
+import { resolveExpensesForMonth } from "@/lib/finance/business-metrics";
 
 function average(values: number[]) {
   if (values.length === 0) return 0;
@@ -100,15 +101,13 @@ export async function getDashboardSummary(userId: string, month: string) {
   const monthlyIncome = incomes.filter(
     (income) => income.month === month || income.date?.startsWith(month),
   );
-  const monthlyExpenses = expenses.filter(
-    (expense) => expense.month === month || expense.date?.startsWith(month),
-  );
+  const monthlyExpenses = resolveExpensesForMonth(expenses, month);
   const incomeTotal = monthlyIncome.reduce(
     (sum, income) => sum + income.netIncome,
     0,
   );
   const expenseTotal = monthlyExpenses.reduce(
-    (sum, expense) => sum + expense.amount,
+    (sum, expense) => sum + Math.max(0, expense.amount || 0),
     0,
   );
   const minimumDebtPayments = debts

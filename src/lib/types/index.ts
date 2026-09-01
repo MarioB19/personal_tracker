@@ -201,7 +201,11 @@ export interface InfoproductOp {
 export interface InfoproductFixedExpense {
   id: string;
   userId: string;
-  month: string; // YYYY-MM (ej. "2026-08")
+  month: string; // Campo legado y mes de vigencia (YYYY-MM)
+  effectiveFrom?: string; // La recurrencia mensual inicia en YYYY-MM
+  seriesId?: string; // Une las versiones históricas del mismo gasto
+  status?: "ACTIVE" | "CANCELLED";
+  revision?: number;
   concept: string;
   amount: number;
   createdAt?: Timestamp;
@@ -237,6 +241,10 @@ export interface Expense {
   amount: number;
   type: ExpenseType;
   frequency: Frequency;
+  effectiveFrom?: string; // Vigencia mensual de una versión recurrente
+  seriesId?: string; // Une versiones del mismo gasto recurrente
+  recurrenceStatus?: "ACTIVE" | "CANCELLED";
+  revision?: number;
   chargeDay?: number; // Día del mes para gastos fijos
   month: string;
   date?: string; // YYYY-MM-DD

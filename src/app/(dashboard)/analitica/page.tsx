@@ -11,6 +11,11 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatPercent, cn, normalizeActivityName } from "@/lib/utils";
 import {
+  addMonthsToMonthKey,
+  resolveExpensesForMonth,
+} from "@/lib/finance/business-metrics";
+import { monthInMexicoCity } from "@/lib/time/month";
+import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, ReferenceLine
 } from "recharts";
@@ -102,6 +107,7 @@ const MONTH_NAMES = [
 ];
 
 const MONTH_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const FINANCE_TRACKING_START_MONTH = "2026-03";
 
 export default function AnaliticaPage() {
   const { user } = useAuth();
@@ -158,6 +164,16 @@ export default function AnaliticaPage() {
   const currentMonthKey = useMemo(() => {
     return `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
   }, [selectedYear, selectedMonth]);
+  const liveMonthKey = monthInMexicoCity();
+  const historicalMonthKeys = useMemo(() => {
+    const months: string[] = [];
+    let cursor = FINANCE_TRACKING_START_MONTH;
+    while (cursor <= liveMonthKey && months.length < 600) {
+      months.push(cursor);
+      cursor = addMonthsToMonthKey(cursor, 1);
+    }
+    return months;
+  }, [liveMonthKey]);
 
   // Previous Month Key for comparing Trend Balance
   const prevMonthKey = useMemo(() => {
@@ -176,16 +192,29 @@ export default function AnaliticaPage() {
 
   // 1. Incomes & Expenses (applied to all active tracking months starting from March 2026)
   const filteredIncomes = useMemo(() => {
-    if (isHistorical) return incomes;
-    if (currentMonthKey < "2026-03") return [];
-    return incomes;
-  }, [incomes, isHistorical, currentMonthKey]);
+    if (isHistorical) {
+      return incomes.filter(
+        (income) =>
+          income.month >= FINANCE_TRACKING_START_MONTH &&
+          income.month <= liveMonthKey,
+      );
+    }
+    if (currentMonthKey < FINANCE_TRACKING_START_MONTH) return [];
+    return incomes.filter((income) => income.month === currentMonthKey);
+  }, [incomes, isHistorical, currentMonthKey, liveMonthKey]);
 
   const filteredExpenses = useMemo(() => {
-    if (isHistorical) return expenses;
-    if (currentMonthKey < "2026-03") return [];
-    return expenses;
-  }, [expenses, isHistorical, currentMonthKey]);
+    if (isHistorical) {
+      return historicalMonthKeys.flatMap((month) =>
+        resolveExpensesForMonth(expenses, month).map((expense) => ({
+          ...expense,
+          id: `${month}:${expense.id}`,
+        })),
+      );
+    }
+    if (currentMonthKey < FINANCE_TRACKING_START_MONTH) return [];
+    return resolveExpensesForMonth(expenses, currentMonthKey);
+  }, [expenses, currentMonthKey, historicalMonthKeys, isHistorical]);
 
   // 2. Goals
   const filteredGoals = useMemo(() => {
@@ -268,16 +297,27 @@ export default function AnaliticaPage() {
 
   // B. Financial Balance
   const totalIncomeValue = filteredIncomes.reduce((sum, i) => sum + i.netIncome, 0);
+  // Debt records do not preserve an activation/cancellation timeline, so the
+  // current minimum payment remains a point-in-time obligation. Multiplying it
+  // backwards would invent payments for months before a debt existed.
   const totalExpenseValue = filteredExpenses.reduce((sum, e) => sum + e.amount, 0) + totalMinPayment;
   const monthlyBalanceValue = totalIncomeValue - totalExpenseValue;
   const savingsRate = totalIncomeValue > 0 ? (monthlyBalanceValue / totalIncomeValue) * 100 : 0;
+  const historicalDayCount = historicalMonthKeys.reduce((days, monthKey) => {
+    const [year, month] = monthKey.split("-").map(Number);
+    return days + new Date(year, month, 0).getDate();
+  }, 0);
   const averageDailySpend = !isHistorical
     ? (totalExpenseValue / new Date(selectedYear, selectedMonth, 0).getDate())
-    : (totalExpenseValue / 365);
+    : (totalExpenseValue / Math.max(1, historicalDayCount));
   
   // Previous Month balance (for trend calculations)
-  const prevMonthIncomes = prevMonthKey >= "2026-03" ? incomes : [];
-  const prevMonthExpenses = prevMonthKey >= "2026-03" ? expenses : [];
+  const prevMonthIncomes = prevMonthKey >= FINANCE_TRACKING_START_MONTH
+    ? incomes.filter((income) => income.month === prevMonthKey)
+    : [];
+  const prevMonthExpenses = prevMonthKey >= FINANCE_TRACKING_START_MONTH
+    ? resolveExpensesForMonth(expenses, prevMonthKey)
+    : [];
   const prevMonthBalance = prevMonthIncomes.reduce((s, i) => s + i.netIncome, 0) - (prevMonthExpenses.reduce((s, e) => s + e.amount, 0) + totalMinPayment);
   const balanceTrendIsUp = monthlyBalanceValue >= prevMonthBalance;
 
@@ -306,14 +346,14 @@ export default function AnaliticaPage() {
       monthlyDataMap[i] = { name: MONTH_SHORT[i], income: 0, expense: 0 };
     }
     
-    const dbTotalIncome = incomes.reduce((s, i) => s + i.netIncome, 0);
-    const dbTotalExpense = expenses.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
-
     for (let mIdx = 0; mIdx < 12; mIdx++) {
       const monthKey = `${selectedYear}-${String(mIdx + 1).padStart(2, "0")}`;
-      if (monthKey >= "2026-03") {
-        monthlyDataMap[mIdx].income = dbTotalIncome;
-        monthlyDataMap[mIdx].expense = dbTotalExpense;
+      if (monthKey >= FINANCE_TRACKING_START_MONTH) {
+        monthlyDataMap[mIdx].income = incomes
+          .filter((income) => income.month === monthKey)
+          .reduce((sum, income) => sum + income.netIncome, 0);
+        monthlyDataMap[mIdx].expense = resolveExpensesForMonth(expenses, monthKey)
+          .reduce((s, e) => s + e.amount, 0) + totalMinPayment;
       }
     }
 

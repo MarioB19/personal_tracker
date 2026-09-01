@@ -41,9 +41,10 @@ Estado al 2026-09-01:
 - Instalación reproducible: correcta.
 - TypeScript: correcto.
 - Build de producción: correcto.
-- ESLint: deuda heredada de 36 errores y 52 advertencias en la UI existente.
-- Tests automatizados: 14 casos para contrato Vibe, mes/fecha CDMX, salud del
-  negocio, límite de intentos y sesión firmada.
+- ESLint: deuda heredada de 36 errores y 48 advertencias en la UI existente.
+- Tests automatizados: 74 casos para contrato Vibe, mes/fecha CDMX, salud del
+  negocio, runway global, series recurrentes, límite de intentos y sesión
+  firmada.
 - Smoke de producción: acceso anónimo redirigido, login `200`, `Finanzas` `200`,
   resumen Vibe de agosto `200`, logout `200` y nueva redirección sin sesión.
 
@@ -56,7 +57,7 @@ ingreso conciliado, CPA, ROAS, calidad de fuentes y detalle por track.
 
 Vibe es la fuente canónica de pauta/ventas cuando el corte está disponible; los
 registros manuales del mismo mes quedan como fallback y **no se suman**, para
-evitar doble conteo. Capital, costo por prueba y gastos fijos continúan siendo
+evitar doble conteo. Caja disponible, costo por prueba y gastos fijos continúan siendo
 propiedad de Personal Tracker. La conexión es de solo lectura y sus tokens nunca
 llegan al navegador.
 
@@ -66,10 +67,48 @@ tamaño, timeout y contrato; las respuestas usan `Cache-Control: no-store`. Si l
 fuente no está disponible, el Health Check mantiene el registro manual como
 fallback y muestra el estado de la conexión.
 
+Solo un corte `FINAL`, que cubra el mes calendario completo, incluya una vez
+cada check `CHECK_1` a `CHECK_5` y reporte una vez
+cada fuente esperada (`meta`, `clicchat`, `platform`) como `connected` o `empty`,
+se considera cierre confirmado. Los cortes provisionales o con fuentes/checks
+incompletos permanecen visibles como estimación, pero no alimentan el runway.
+
 El corte productivo de agosto de 2026 está disponible con 5 productos y estado
 `PROVISIONAL`: Meta y ClicChat reportan `connected`; Plataforma reporta
 `not_configured`. Hasta configurar esa fuente, las ventas de Track A pueden
 estar incompletas y el tablero conserva la advertencia visible.
+
+## Runway global y gastos fijos recurrentes
+
+`Finanzas → Negocio` separa la posición global del diagnóstico del mes. Existe
+una sola caja disponible y un solo runway, ambos independientes del mes que se
+esté consultando. El burn usa el escenario más conservador entre el resultado
+neto promedio de hasta tres meses cerrados y la proyección del mes actual; si
+no hay operación confirmada, usa el compromiso fijo recurrente.
+
+La caja es un saldo puntual declarado por el usuario, no el resultado del mes
+visible. La capacidad de test reserva primero tres meses de gastos fijos y solo
+considera el capital restante.
+
+Los gastos fijos se registran una vez y se aplican automáticamente desde su mes
+de vigencia a los siguientes. Un cambio de importe crea una nueva versión y
+detener un gasto conserva el histórico. Los documentos heredados creados con
+“copiar mes anterior” se agrupan por concepto para evitar doble conteo. La vista
+anual resuelve cada recurrencia por mes, consolida YTD y marca el futuro como
+planeado.
+
+Los periodos donde Vibe no responde o no cumple calidad de cierre se marcan
+como incompletos y no se convierten silenciosamente en una pérdida confirmada.
+El corte actual y los cierres incompletos se actualizan cada cinco minutos, con
+un máximo de cuatro consultas simultáneas. En la pestaña general de gastos, los
+conceptos `FIJO` y `SUSCRIPCION` mensuales permanecen activos en los meses
+siguientes; los `VARIABLE` y otras frecuencias afectan únicamente el P&L de su
+periodo declarado. Solo los compromisos mensuales alimentan la reserva y el
+runway. Ante el mismo concepto prevalece la serie versionada del Health Check,
+sin impedir una serie nueva identificada explícitamente después de un rename o
+cancelación. La misma recurrencia se usa en Finanzas, Dashboard, Analítica, el
+resumen API y
+`GET /api/v1/finance/expenses?month=YYYY-MM`.
 
 ## API local v1
 
@@ -84,6 +123,8 @@ Endpoints iniciales:
 - `GET /api/v1/finance/expenses`
 - `POST /api/v1/finance/expenses/preview`
 - `POST /api/v1/finance/expenses` con `Idempotency-Key`
+- `PATCH /api/v1/finance/expenses/series` con `Idempotency-Key`, acción
+  `UPDATE`/`STOP` y control optimista `expectedRevision`
 - `GET /api/v1/agenda/template`
 - `PUT /api/v1/agenda/template` con revisión optimista e `Idempotency-Key`
 - `POST /api/v1/agenda/template/preview` (siempre sin escrituras)
@@ -99,8 +140,17 @@ reutilizan el SDK web anónimo: el bearer protege el proceso HTTP local, pero no
 constituye una barrera de seguridad para Firestore. No expongas el puerto ni la
 API públicamente.
 
-`POST /api/v1/finance/expenses` persiste en el Firebase real. Usa primero
-`/preview`; el smoke test omite deliberadamente una escritura exitosa.
+`POST /api/v1/finance/expenses` persiste en el Firebase real. Los gastos fijos
+y suscripciones mensuales convergen en una serie estable; cada cambio agrega
+una versión y el estado vigente se coordina en `expenseSeries`. Un claim
+transaccional en `expenseIdentityClaims` impide que dos pestañas o integraciones
+creen compromisos activos duplicados. `externalRef`,
+cuando existe, separa compromisos homónimos. El `PATCH` permite cambiar o
+detener la serie con vigencia en el mes actual y control de revisión, sin
+reescribir meses anteriores. El ledger del Health Check aplica la misma
+coordinación en `infoproductFixedExpenseSeries` y bloquea altas homónimas
+concurrentes en `infoproductFixedExpenseClaims`. Usa primero `/preview`; el
+smoke test omite deliberadamente una escritura exitosa.
 
 Esta restricción aplica a `/api/v1`. No describe el proxy agregado de Vibe, que
 solo puede leer el upstream configurado y exige una sesión web válida.
@@ -137,7 +187,9 @@ atómica con IDs deterministas.
   deployment de producción.
 - Proyecto histórico: `mario-muros-projects/personal-tracker`.
 - Producción: `https://personal-tracker-brown.vercel.app`.
-- Base funcional publicada: `d29e52c`.
+- Referencia estable previa a este release: `45106fa` —base funcional
+  `d29e52c`—. El SHA final y el deployment verificado se registran en el
+  Second Brain después de cada publicación.
 - Upstream Vibe: `https://dashboard-wa-five.vercel.app`, commit `f6b3084`
   —base funcional `2069755`—.
 - No se usa ChatGPT Sites y el proyecto no debe conservar

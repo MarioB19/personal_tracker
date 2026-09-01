@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useUid } from "@/lib/hooks/useAuth";
 import {
   getAllFinance,
   createFinance,
+  createRecurringExpenseVersion,
+  FinanceRecurrenceConflictError,
   updateFinance,
   removeFinance,
 } from "@/lib/repositories/firestore";
@@ -67,6 +69,14 @@ import {
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { dateInMexicoCity, monthInMexicoCity } from "@/lib/time/month";
+import {
+  recurringBusinessExpenseSeriesId,
+  resolveExpensesForMonth,
+} from "@/lib/finance/business-metrics";
+import {
+  findActiveExpenseIdentityConflict,
+  selectExpenseSeriesForIdentity,
+} from "@/lib/finance/expense-series";
 import InfoproductHealthCheck from "@/components/finanzas/InfoproductHealthCheck";
 
 type TabType = "health-check" | "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
@@ -95,6 +105,18 @@ const getExpenseCategoryIcon = (cat: ExpenseCategory) => {
     default: return HelpCircle;
   }
 };
+
+const isMonthlyRecurringExpense = (expense: Pick<Expense, "type" | "frequency">) =>
+  (expense.type === "FIJO" || expense.type === "SUSCRIPCION") &&
+  (!expense.frequency || expense.frequency === "MENSUAL");
+
+const createRecurrenceRevision = (previousRevision?: number) =>
+  Math.max(
+    Date.now(),
+    typeof previousRevision === "number" && Number.isFinite(previousRevision)
+      ? previousRevision + 1
+      : 0,
+  );
 
 const isDebtDueSoon = (dueDateDay: number) => {
   const today = new Date();
@@ -266,9 +288,11 @@ export default function FinanzasPage() {
   const [financialContext, setFinancialContext] = useState<FinancialContext>("PERSONAL");
 
   // ── Business Config State ──
-  const [initialBusinessCapital, setInitialBusinessCapital] = useState<number>(0);
+  const [availableBusinessCash, setAvailableBusinessCash] = useState<number>(0);
+  const [businessCashConfigured, setBusinessCashConfigured] = useState(false);
+  const [businessCashNeedsReview, setBusinessCashNeedsReview] = useState(false);
   const [productTestCost, setProductTestCost] = useState<number>(1000);
-  const [bCapitalInput, setBCapitalInput] = useState("");
+  const [bCashInput, setBCashInput] = useState("");
   const [bTestCostInput, setBTestCostInput] = useState("");
 
   // ── Product form ──
@@ -390,13 +414,27 @@ export default function FinanzasPage() {
     }
 
     const bConfigDoc = await getDoc(doc(db, "users", uid, "finance", "business_config"));
+    setBusinessCashConfigured(false);
+    setBusinessCashNeedsReview(false);
     if (bConfigDoc.exists()) {
       const bData = bConfigDoc.data();
-      const cap = bData.initialBusinessCapital || 0;
+      const hasCurrentCash =
+        typeof bData.availableBusinessCash === "number" &&
+        Number.isFinite(bData.availableBusinessCash);
+      const hasLegacyCapital =
+        typeof bData.initialBusinessCapital === "number" &&
+        Number.isFinite(bData.initialBusinessCapital);
+      const inheritedCash =
+        hasLegacyCapital
+          ? bData.initialBusinessCapital
+          : 0;
+      const cash = hasCurrentCash ? bData.availableBusinessCash : inheritedCash;
       const tCost = bData.productTestCost || 1000;
-      setInitialBusinessCapital(cap);
+      setAvailableBusinessCash(cash);
+      setBusinessCashConfigured(hasCurrentCash || hasLegacyCapital);
+      setBusinessCashNeedsReview(!hasCurrentCash && hasLegacyCapital);
       setProductTestCost(tCost);
-      setBCapitalInput(cap.toString());
+      setBCashInput(cash.toString());
       setBTestCostInput(tCost.toString());
     }
 
@@ -443,64 +481,37 @@ export default function FinanzasPage() {
     return ctx === financialContext && inc.month === currentMonth;
   });
 
-  const monthlyExpensesList = expenses.filter((exp) => {
-    const ctx = exp.financialContext || "PERSONAL";
-    return ctx === financialContext && exp.month === currentMonth;
-  });
-
-  // Business Specific Calculations
-  const productExpenses = monthlyExpensesList
-    .filter((e) => e.type !== "SUSCRIPCION")
-    .reduce((s, e) => s + e.amount, 0);
-
-  const monthlySubscriptions = monthlyExpensesList
-    .filter((e) => e.type === "SUSCRIPCION" && (e.subscriptionStatus || "active") !== "cancelled")
-    .reduce((s, e) => s + e.amount, 0);
-
-  const currentInfoproductOps = infoproductOps.filter(
-    (operation) => operation.month === currentMonth,
+  // Resolve the complete series first. Filtering before resolution can revive
+  // an obsolete version when a series changes financial context.
+  const monthlyExpensesList = resolveExpensesForMonth(expenses, currentMonth)
+    .filter(
+      (expense) =>
+        (expense.financialContext || "PERSONAL") === financialContext,
+    );
+  const businessExpenses = expenses;
+  const editingExpenseRecord = editingId
+    ? expenses.find((expense) => expense.id === editingId)
+    : undefined;
+  const editingRecurringExpense = Boolean(
+    editingExpenseRecord &&
+      isMonthlyRecurringExpense(editingExpenseRecord),
   );
-  const currentInfoproductFixedExpenses = infoproductFixedExpenses.filter(
-    (expense) => expense.month === currentMonth,
-  );
-  const totalInfoproductRevenue = currentInfoproductOps.reduce(
-    (sum, operation) => sum + (operation.revenue || 0),
-    0,
-  );
-  const totalInfoproductAdSpend = currentInfoproductOps.reduce(
-    (sum, operation) => sum + (operation.adSpend || 0),
-    0,
-  );
-  const totalInfoproductFixed = currentInfoproductFixedExpenses.reduce(
-    (sum, expense) => sum + (expense.amount || 0),
-    0,
+  const editingOneOffExpense = Boolean(
+    editingExpenseRecord && !editingRecurringExpense,
   );
 
-  const totalIncome =
-    financialContext === "BUSINESS"
-      ? monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0) + totalInfoproductRevenue
-      : monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
+  // Estos totales pertenecen únicamente al ledger genérico. La operación de
+  // infoproductos se presenta y calcula por separado en el health check.
+  const totalIncome = monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
 
   const totalExpenses =
-    financialContext === "BUSINESS"
-      ? productExpenses + monthlySubscriptions + totalInfoproductAdSpend + totalInfoproductFixed
-      : monthlyExpensesList.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
+    monthlyExpensesList.reduce(
+      (sum, expense) => sum + Math.max(0, expense.amount || 0),
+      0,
+    ) +
+    (financialContext === "PERSONAL" ? totalMinPayment : 0);
 
   const netBalance = totalIncome - totalExpenses;
-  const netProfit = totalIncome - totalExpenses;
-
-  // Business Runway, Capital & Product Testing Calculations
-  const currentBusinessCapital = initialBusinessCapital + netProfit;
-  const burnRate = netProfit < 0 ? Math.abs(netProfit) : 0;
-  const runwayMonths =
-    netProfit >= 0
-      ? null
-      : burnRate > 0 && currentBusinessCapital > 0
-      ? currentBusinessCapital / burnRate
-      : 0;
-  const testCost = productTestCost > 0 ? productTestCost : 1000;
-  const possibleTests =
-    currentBusinessCapital > 0 ? Math.floor(currentBusinessCapital / testCost) : 0;
 
   const totalDebt = debts
     .filter((d) => d.status === "ACTIVE")
@@ -533,7 +544,7 @@ export default function FinanzasPage() {
     if (pName) {
       if (exp.type === "SUSCRIPCION" && exp.subscriptionStatus === "cancelled") return;
       const current = productSummaryMap.get(pName) || { income: 0, expense: 0 };
-      current.expense += exp.amount;
+      current.expense += Math.max(0, exp.amount || 0);
       productSummaryMap.set(pName, current);
     }
   });
@@ -552,21 +563,32 @@ export default function FinanzasPage() {
   };
 
   const openEditBusinessConfig = () => {
-    setBCapitalInput(initialBusinessCapital.toString());
+    setBCashInput(availableBusinessCash.toString());
     setBTestCostInput(productTestCost.toString());
     setModal("business_config");
   };
 
   const saveBusinessConfig = async () => {
     if (!uid) return;
-    const cap = Number(bCapitalInput) || 0;
-    const tCost = Number(bTestCostInput) || 1000;
-    setInitialBusinessCapital(cap);
+    const parsedCash = Number(bCashInput);
+    const parsedTestCost = Number(bTestCostInput);
+    const cash = Number.isFinite(parsedCash) ? parsedCash : 0;
+    const tCost =
+      Number.isFinite(parsedTestCost) && parsedTestCost > 0
+        ? parsedTestCost
+        : 1000;
+    setAvailableBusinessCash(cash);
+    setBusinessCashConfigured(true);
+    setBusinessCashNeedsReview(false);
     setProductTestCost(tCost);
 
     await setDoc(
       doc(db, "users", uid, "finance", "business_config"),
-      { initialBusinessCapital: cap, productTestCost: tCost },
+      {
+        availableBusinessCash: cash,
+        initialBusinessCapital: cash,
+        productTestCost: tCost,
+      },
       { merge: true }
     );
     closeModal();
@@ -642,6 +664,20 @@ export default function FinanzasPage() {
     setModal("expense");
   };
 
+  const openCreateExpense = () => {
+    setEditingId(null);
+    setEName("");
+    setECat("COMIDA");
+    setEAmount("");
+    setEType("VARIABLE");
+    setEChargeDay("");
+    setEProductId("");
+    setEProductName("");
+    setESubscriptionStatus("active");
+    setEDate(dateInMexicoCity());
+    setModal("expense");
+  };
+
   const openCreateIncome = () => {
     setEditingId(null);
     setISource("");
@@ -680,7 +716,15 @@ export default function FinanzasPage() {
     setEProductId(e.productId || "");
     setEProductName(e.productName || "");
     setESubscriptionStatus(e.subscriptionStatus || "active");
-    setEDate(e.date || (e.createdAt?.toDate ? dateInMexicoCity(e.createdAt.toDate()) : `${e.month}-01`));
+    const isRecurring = isMonthlyRecurringExpense(e);
+    setEDate(
+      isRecurring
+        ? dateInMexicoCity()
+        : e.date ||
+            (e.createdAt?.toDate
+              ? dateInMexicoCity(e.createdAt.toDate())
+              : `${e.month}-01`),
+    );
     setModal("expense");
   };
 
@@ -762,21 +806,74 @@ export default function FinanzasPage() {
   };
 
   const saveExpense = async () => {
-    if (!uid || !eName.trim()) return;
+    const amount = Number(eAmount);
+    const cents = amount * 100;
+    const moneyTolerance =
+      Number.EPSILON * Math.max(1, Math.abs(cents)) * 4;
+    if (
+      !uid ||
+      !eName.trim() ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > 100_000_000 ||
+      Math.abs(cents - Math.round(cents)) > moneyTolerance
+    ) {
+      window.alert("Ingresa un monto positivo con máximo dos decimales.");
+      return;
+    }
     const existingItem = editingId ? expenses.find((item) => item.id === editingId) : null;
     const targetCtx = existingItem?.financialContext || financialContext;
 
     const selectedProd = products.find((p) => p.id === eProductId);
     const finalProdName = selectedProd ? selectedProd.name : eProductName.trim();
     const finalDate = eDate || dateInMexicoCity();
+    const revision = createRecurrenceRevision(existingItem?.revision);
+    const existingWasRecurring = Boolean(
+      existingItem && isMonthlyRecurringExpense(existingItem),
+    );
+    const targetIsRecurring =
+      (eType === "FIJO" || eType === "SUSCRIPCION") &&
+      !(existingItem && !existingWasRecurring);
+    const parsedChargeDay = eChargeDay ? Number(eChargeDay) : undefined;
+    if (
+      parsedChargeDay !== undefined &&
+      (!Number.isInteger(parsedChargeDay) ||
+        parsedChargeDay < 1 ||
+        parsedChargeDay > 31)
+    ) {
+      window.alert("El día de cargo debe estar entre 1 y 31.");
+      return;
+    }
+    if (existingWasRecurring && !targetIsRecurring) return;
+    if (
+      existingItem &&
+      !existingWasRecurring &&
+      eType !== existingItem.type
+    ) {
+      return;
+    }
+    if (targetIsRecurring && finalDate > dateInMexicoCity()) return;
+    if (targetIsRecurring && finalDate.slice(0, 7) !== currentMonth) {
+      window.alert(
+        "Las altas y modificaciones recurrentes solo pueden iniciar en el mes actual para conservar los cierres históricos.",
+      );
+      return;
+    }
 
     const payload = {
       name: eName,
       category: eCat,
-      amount: Number(eAmount) || 0,
+      amount,
       type: eType,
-      frequency: "MENSUAL" as Frequency,
-      chargeDay: (eType === "SUSCRIPCION" || eType === "FIJO") && eChargeDay ? Number(eChargeDay) : undefined,
+      frequency:
+        existingItem && !existingWasRecurring
+          ? existingItem.frequency ||
+            (existingItem.type === "VARIABLE" ? "UNICO" : "MENSUAL")
+          : ((eType === "VARIABLE" ? "UNICO" : "MENSUAL") as Frequency),
+      chargeDay:
+        eType === "SUSCRIPCION" || eType === "FIJO"
+          ? parsedChargeDay
+          : undefined,
       month: finalDate.slice(0, 7),
       date: finalDate,
       isNecessity: true,
@@ -784,10 +881,61 @@ export default function FinanzasPage() {
       productId: eProductId || undefined,
       productName: finalProdName || undefined,
       subscriptionStatus: eType === "SUSCRIPCION" ? eSubscriptionStatus : undefined,
+      externalRef: existingItem?.externalRef,
       notes: "",
     };
-    if (editingId) await updateFinance(uid, "expenses", editingId, payload);
-    else await createFinance(uid, "expenses", payload);
+    const seriesId = existingItem
+      ? recurringBusinessExpenseSeriesId(existingItem)
+      : selectExpenseSeriesForIdentity(
+          expenses.filter(isMonthlyRecurringExpense),
+          payload,
+        ).seriesId;
+
+    if (targetIsRecurring) {
+      const recurringPayload = {
+        ...payload,
+        effectiveFrom: payload.month,
+        seriesId,
+        recurrenceStatus:
+          eType === "SUSCRIPCION" && eSubscriptionStatus === "cancelled"
+            ? ("CANCELLED" as const)
+            : ("ACTIVE" as const),
+        revision,
+      };
+      const identityConflict = findActiveExpenseIdentityConflict(
+        expenses,
+        recurringPayload,
+        seriesId,
+      );
+      if (identityConflict) {
+        window.alert(
+          "Ya existe otro gasto recurrente vigente con esa identidad. Edita la serie correspondiente para evitar duplicar el compromiso.",
+        );
+        return;
+      }
+      try {
+        await createRecurringExpenseVersion(
+          uid,
+          recurringPayload,
+          existingWasRecurring && existingItem?.revision
+            ? existingItem.revision
+            : 0,
+        );
+      } catch (error) {
+        if (error instanceof FinanceRecurrenceConflictError) {
+          window.alert(
+            "Este gasto cambió en otra operación. Recargamos los datos para que revises la versión vigente.",
+          );
+          await loadData();
+          return;
+        }
+        throw error;
+      }
+    } else if (editingId) {
+      await updateFinance(uid, "expenses", editingId, payload);
+    } else {
+      await createFinance(uid, "expenses", payload);
+    }
     resetExpenseForm();
     closeModal();
     loadData();
@@ -875,6 +1023,58 @@ export default function FinanzasPage() {
      }
     setMName(""); setMTarget(""); setMCurrent("");
     closeModal();
+    loadData();
+  };
+
+  const stopRecurringExpense = async (expense: Expense) => {
+    if (!uid) return;
+    const confirmed = window.confirm(
+      `¿Detener “${expense.name}” desde ${currentMonth}? Los meses anteriores conservarán su historial.`,
+    );
+    if (!confirmed) return;
+
+    const revision = createRecurrenceRevision(expense.revision);
+    const amount =
+      Number.isFinite(expense.amount) && expense.amount > 0
+        ? expense.amount
+        : 0.01;
+    try {
+      await createRecurringExpenseVersion(
+        uid,
+        {
+          name: expense.name,
+          category: expense.category,
+          amount,
+          type: expense.type,
+          frequency: "MENSUAL" as Frequency,
+          effectiveFrom: currentMonth,
+          seriesId: recurringBusinessExpenseSeriesId(expense),
+          recurrenceStatus: "CANCELLED" as const,
+          revision,
+          chargeDay: expense.chargeDay,
+          month: currentMonth,
+          date: dateInMexicoCity(),
+          isNecessity: expense.isNecessity,
+          financialContext: expense.financialContext || "PERSONAL",
+          productId: expense.productId,
+          productName: expense.productName,
+          externalRef: expense.externalRef,
+          subscriptionStatus:
+            expense.type === "SUSCRIPCION" ? "cancelled" : undefined,
+          notes: expense.notes || "",
+        },
+        expense.revision || 0,
+      );
+    } catch (error) {
+      if (error instanceof FinanceRecurrenceConflictError) {
+        window.alert(
+          "Este gasto cambió en otra operación. Recargamos los datos para que revises la versión vigente.",
+        );
+        await loadData();
+        return;
+      }
+      throw error;
+    }
     loadData();
   };
 
@@ -1028,15 +1228,24 @@ export default function FinanzasPage() {
               userId={uid || ""}
               ops={infoproductOps}
               fixedExpenses={infoproductFixedExpenses}
-              initialBusinessCapital={initialBusinessCapital}
+              businessExpenses={businessExpenses}
+              availableBusinessCash={availableBusinessCash}
+              cashConfigured={businessCashConfigured}
+              cashNeedsReview={businessCashNeedsReview}
               productTestCost={productTestCost}
-              onSaveBusinessConfig={async (cap, tCost) => {
+              onSaveBusinessConfig={async (cash, tCost) => {
                 if (!uid) return;
-                setInitialBusinessCapital(cap);
+                setAvailableBusinessCash(cash);
+                setBusinessCashConfigured(true);
+                setBusinessCashNeedsReview(false);
                 setProductTestCost(tCost);
                 await setDoc(
                   doc(db, "users", uid, "finance", "business_config"),
-                  { initialBusinessCapital: cap, productTestCost: tCost },
+                  {
+                    availableBusinessCash: cash,
+                    initialBusinessCapital: cash,
+                    productTestCost: tCost,
+                  },
                   { merge: true }
                 );
               }}
@@ -1157,9 +1366,9 @@ export default function FinanzasPage() {
                 <Section title="Estructura de Gastos y Amortización">
                   <div className="divide-y divide-white/[0.04]">
                     {[
-                      { label: "Gastos Fijos Planificados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Home },
-                      { label: "Gastos Variables Estimados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Zap },
-                      { label: "Suscripciones Recurrentes", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: RefreshCw },
+                      { label: "Gastos Fijos Planificados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "FIJO").reduce((s, e) => s + Math.max(0, e.amount || 0), 0)), highlight: false, icon: Home },
+                      { label: "Gastos Variables Estimados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + Math.max(0, e.amount || 0), 0)), highlight: false, icon: Zap },
+                      { label: "Suscripciones Recurrentes", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + Math.max(0, e.amount || 0), 0)), highlight: false, icon: RefreshCw },
                       { label: "Pago Mínimo Comprometido (Deuda)", value: formatCurrency(debts.filter((d) => d.status === "ACTIVE").reduce((s, d) => s + d.minimumPayment, 0)), highlight: debts.filter((d) => d.status === "ACTIVE").length > 0, icon: CreditCard },
                     ].map((row, i) => {
                       const RowIcon = row.icon;
@@ -1329,12 +1538,16 @@ export default function FinanzasPage() {
                                 {(e.subscriptionStatus || "active") === "active" ? "Activa" : "Cancelada"}
                               </span>
                               <span className="text-sm font-black text-red-400 shrink-0">
-                                -{formatCurrency(e.amount)}
+                                -{formatCurrency(Math.max(0, e.amount || 0))}
                               </span>
                             </div>
                           }
                           onEdit={() => openEditExpense(e)}
-                          onDelete={() => deleteItem("expenses", e.id)}
+                          onDelete={() =>
+                            isMonthlyRecurringExpense(e)
+                              ? stopRecurringExpense(e)
+                              : deleteItem("expenses", e.id)
+                          }
                         />
                       ))}
                   </div>
@@ -1411,7 +1624,7 @@ export default function FinanzasPage() {
           title={financialContext === "BUSINESS" ? "Gastos del Negocio" : "Listado de Conceptos de Gastos"}
           action={
             <button
-              onClick={() => setModal("expense")}
+              onClick={openCreateExpense}
               className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
             >
               <Plus className="w-4 h-4" /> Agregar Gasto
@@ -1432,7 +1645,7 @@ export default function FinanzasPage() {
                       "text-zinc-400 bg-zinc-500/10 border-white/5"
                     }
                     title={e.name}
-                    subtitle={`${e.category} · Gasto ${e.type.toLowerCase()}${e.productName ? ` · Producto: ${e.productName}` : ""}${(e.type === "FIJO" || e.type === "SUSCRIPCION") && e.chargeDay ? ` · Cargo día ${e.chargeDay}` : ""}`}
+                    subtitle={`${e.category} · Gasto ${e.type.toLowerCase()}${e.type === "FIJO" || e.type === "SUSCRIPCION" ? ` · recurrente desde ${e.effectiveFrom || e.month}` : ""}${e.productName ? ` · Producto: ${e.productName}` : ""}${(e.type === "FIJO" || e.type === "SUSCRIPCION") && e.chargeDay ? ` · Cargo día ${e.chargeDay}` : ""}`}
                     right={
                       <div className="flex items-center gap-3 mr-2 font-mono">
                         {e.type === "SUSCRIPCION" && (
@@ -1456,12 +1669,16 @@ export default function FinanzasPage() {
                           {e.type.toLowerCase()}
                         </span>
                         <span className="text-sm font-black text-red-400 shrink-0">
-                          -{formatCurrency(e.amount)}
+                          -{formatCurrency(Math.max(0, e.amount || 0))}
                         </span>
                       </div>
                     }
                     onEdit={() => openEditExpense(e)}
-                    onDelete={() => deleteItem("expenses", e.id)}
+                    onDelete={() =>
+                      isMonthlyRecurringExpense(e)
+                        ? stopRecurringExpense(e)
+                        : deleteItem("expenses", e.id)
+                    }
                   />
                 );
               })}
@@ -1472,7 +1689,7 @@ export default function FinanzasPage() {
               <h3 className="text-xs font-bold text-zinc-300">Sin Gastos Registrados</h3>
               <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">Controla tus gastos fijos y variables para calcular tu capacidad de ahorro real mensual.</p>
               <button
-                onClick={() => setModal("expense")}
+                onClick={openCreateExpense}
                 className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs"
               >
                 + Registrar Primer Gasto
@@ -1940,17 +2157,17 @@ export default function FinanzasPage() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
-                      Presupuesto / Capital Inicial del Negocio
+                      Caja / Capital disponible actual
                     </label>
                     <input 
                       type="number" 
-                      value={bCapitalInput} 
-                      onChange={(e) => setBCapitalInput(e.target.value)} 
+                      value={bCashInput}
+                      onChange={(e) => setBCashInput(e.target.value)}
                       placeholder="Ej: 50000" 
                       className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
                     />
                     <p className="text-[11px] text-zinc-500 mt-1.5 leading-normal">
-                      Este es tu presupuesto base. El capital disponible aumentará automáticamente con tus ganancias o disminuirá con tus pérdidas y gastos.
+                      Registra el efectivo líquido disponible hoy para operar el negocio. Actualízalo cuando cambie tu saldo real.
                     </p>
                   </div>
 
@@ -1960,6 +2177,8 @@ export default function FinanzasPage() {
                     </label>
                     <input 
                       type="number" 
+                      min="0.01"
+                      step="0.01"
                       value={bTestCostInput} 
                       onChange={(e) => setBTestCostInput(e.target.value)} 
                       placeholder="Ej: 1000" 
@@ -2199,9 +2418,11 @@ export default function FinanzasPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fecha del Gasto</label>
+                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">{editingRecurringExpense ? "Aplicar cambio desde" : "Fecha del Gasto"}</label>
                       <input 
                         type="date" 
+                        min={editingRecurringExpense ? `${currentMonth}-01` : undefined}
+                        max={eType === "FIJO" || eType === "SUSCRIPCION" ? dateInMexicoCity() : undefined}
                         value={eDate} 
                         onChange={(e) => setEDate(e.target.value)} 
                         className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
@@ -2212,6 +2433,8 @@ export default function FinanzasPage() {
                       <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto de Gasto</label>
                       <input 
                         type="number" 
+                        min="0.01"
+                        step="0.01"
                         value={eAmount} 
                         onChange={(e) => setEAmount(e.target.value)} 
                         placeholder="0" 
@@ -2219,6 +2442,18 @@ export default function FinanzasPage() {
                       />
                     </div>
                   </div>
+
+                  {editingRecurringExpense && (
+                    <p className="rounded-xl border border-blue-500/15 bg-blue-500/[0.05] px-3 py-2.5 text-[10px] leading-relaxed text-zinc-400">
+                      Guardar crea una nueva versión desde la fecha elegida; los meses anteriores conservan el importe previo. Para convertirlo en gasto único, primero detén la recurrencia y registra un movimiento nuevo.
+                    </p>
+                  )}
+
+                  {editingOneOffExpense && (
+                    <p className="rounded-xl border border-zinc-700/60 bg-white/[0.025] px-3 py-2.5 text-[10px] leading-relaxed text-zinc-400">
+                      Este movimiento conserva su tipo y frecuencia históricos. Para cambiar su recurrencia, crea un gasto nuevo por separado.
+                    </p>
+                  )}
 
                   {(eType === "SUSCRIPCION" || eType === "FIJO") && (
                     <div>
@@ -2243,9 +2478,14 @@ export default function FinanzasPage() {
                         <button
                           key={t}
                           type="button"
+                          disabled={
+                            (editingRecurringExpense && t === "VARIABLE") ||
+                            (editingOneOffExpense &&
+                              t !== editingExpenseRecord?.type)
+                          }
                           onClick={() => setEType(t)}
                           className={cn(
-                            "py-2.5 rounded-xl text-xs font-semibold border transition-all truncate transform active:scale-95 px-1 text-center",
+                            "py-2.5 rounded-xl text-xs font-semibold border transition-all truncate transform active:scale-95 px-1 text-center disabled:cursor-not-allowed disabled:opacity-35 disabled:active:scale-100",
                             eType === t
                               ? "bg-amber-500/10 border-amber-500/25 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
                               : "bg-black/30 border-white/[0.04] text-zinc-500 hover:border-white/[0.15] hover:text-zinc-300"
@@ -2492,7 +2732,9 @@ export default function FinanzasPage() {
                 disabled={
                   modal === "product" ? !pName.trim() :
                   modal === "income" ? !iSource.trim() :
-                  modal === "expense" ? !eName.trim() :
+                  modal === "expense"
+                    ? !eName.trim() || !Number.isFinite(Number(eAmount)) || Number(eAmount) <= 0
+                    :
                   modal === "debt" ? !dEntity.trim() :
                   modal === "business_config" ? false :
                   modal === "saving" ? false : !mName.trim()

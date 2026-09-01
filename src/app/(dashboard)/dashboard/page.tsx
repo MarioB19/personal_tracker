@@ -47,6 +47,11 @@ import {
 import Link from "next/link";
 import { formatPercent, getStatusColor, formatCurrency } from "@/lib/utils";
 import {
+  addMonthsToMonthKey,
+  resolveExpensesForMonth,
+} from "@/lib/finance/business-metrics";
+import { monthInMexicoCity } from "@/lib/time/month";
+import {
   ResponsiveContainer,
   AreaChart,
   Area,
@@ -297,21 +302,19 @@ export default function DashboardPage() {
   const hasData = goals.length > 0 || missions.length > 0;
 
   // ── Finance Computations ──
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = monthInMexicoCity();
   
   const totalMinPayment = debts
     .filter((d) => d.status === "ACTIVE")
     .reduce((sum, d) => sum + d.minimumPayment, 0);
 
-  const monthlyIncomesList = incomes.filter(inc => {
-    if (currentMonth < "2026-03") return false;
-    return true;
-  });
+  const monthlyIncomesList = currentMonth >= "2026-03"
+    ? incomes.filter((income) => income.month === currentMonth)
+    : [];
 
-  const monthlyExpensesList = expenses.filter(exp => {
-    if (currentMonth < "2026-03") return false;
-    return true;
-  });
+  const monthlyExpensesList = currentMonth >= "2026-03"
+    ? resolveExpensesForMonth(expenses, currentMonth)
+    : [];
 
   const totalIncome = monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
   const totalExpenses = monthlyExpensesList.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
@@ -321,13 +324,18 @@ export default function DashboardPage() {
   const netBalance = totalIncome - totalExpenses;
   const savingsRate = totalIncome > 0 ? Math.round((netBalance / totalIncome) * 100) : 0;
 
-  // Recharts: multi-month trend calculation using constant baseline propagation
-  const months = ["2026-03", "2026-04", "2026-05"];
+  // Recharts: últimos seis meses con datos asignados a su periodo real.
+  const months = Array.from({ length: 6 }, (_, index) =>
+    addMonthsToMonthKey(currentMonth, index - 5),
+  ).filter((month) => month >= "2026-03");
 
   const chartData = months.map(m => {
-    // Treat all database items as a constant baseline starting from March 2026
-    const incSum = incomes.reduce((s, i) => s + i.netIncome, 0);
-    const expSum = expenses.reduce((s, e) => s + e.amount, 0) + totalMinPayment;
+    const incSum = incomes
+      .filter((income) => income.month === m)
+      .reduce((sum, income) => sum + income.netIncome, 0);
+    const expSum = resolveExpensesForMonth(expenses, m)
+      .reduce((sum, expense) => sum + Math.max(0, expense.amount || 0), 0) +
+      (m === currentMonth ? totalMinPayment : 0);
     
     const [year, monthStr] = m.split("-");
     const date = new Date(parseInt(year), parseInt(monthStr) - 1, 1);

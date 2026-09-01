@@ -108,3 +108,42 @@ test("rechaza diferencias de gasto neto, IVA y bruto", () => {
   grossMismatch.products[0].spendGross = 600;
   assert.equal(vibeBusinessSummarySchema.safeParse(grossMismatch).success, false);
 });
+
+test("valida fechas reales y exige el mes calendario completo para FINAL", () => {
+  const invalidDate = fixture();
+  invalidDate.period.end = "2026-08-32";
+  assert.equal(vibeBusinessSummarySchema.safeParse(invalidDate).success, false);
+
+  const partialFinal = fixture();
+  partialFinal.status = "FINAL";
+  partialFinal.period.start = "2026-08-15";
+  assert.equal(vibeBusinessSummarySchema.safeParse(partialFinal).success, false);
+
+  const completeFinal = fixture();
+  completeFinal.status = "FINAL";
+  assert.equal(vibeBusinessSummarySchema.safeParse(completeFinal).success, true);
+});
+
+test("rechaza productos y checks duplicados", () => {
+  const duplicatedProduct = fixture();
+  duplicatedProduct.products.push({ ...duplicatedProduct.products[0] });
+  duplicatedProduct.summary.spendNet *= 2;
+  duplicatedProduct.summary.vatAmount *= 2;
+  duplicatedProduct.summary.spendGross *= 2;
+  duplicatedProduct.summary.conversations *= 2;
+  duplicatedProduct.summary.sales *= 2;
+  duplicatedProduct.summary.revenueReconciled *= 2;
+  assert.equal(
+    vibeBusinessSummarySchema.safeParse(duplicatedProduct).success,
+    false,
+  );
+
+  const duplicatedCheck = fixture();
+  duplicatedCheck.quality.checks.push({
+    ...duplicatedCheck.quality.checks[0],
+  });
+  assert.equal(
+    vibeBusinessSummarySchema.safeParse(duplicatedCheck).success,
+    false,
+  );
+});
