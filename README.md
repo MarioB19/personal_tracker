@@ -18,9 +18,9 @@ npm run api:token
 npm run dev
 ```
 
-Abrir `http://127.0.0.1:3000`. Tanto desarrollo como producción se enlazan por
-defecto a loopback. El token de API se genera dentro de `.env.local`, no se
-imprime y no se versiona.
+Abrir `http://127.0.0.1:3000`. Los comandos locales `dev` y `start` se enlazan a
+loopback; la producción remota se sirve desde Vercel. El token de API se genera
+dentro de `.env.local`, no se imprime y no se versiona.
 
 El acceso web usa una cookie `HttpOnly` firmada. `TRACKER_ACCESS_CODE` y
 `TRACKER_SESSION_SECRET` permanecen en el servidor; el código ya no se compara
@@ -36,14 +36,16 @@ npm run build
 npm run check
 ```
 
-Estado al 2026-08-31:
+Estado al 2026-09-01:
 
 - Instalación reproducible: correcta.
 - TypeScript: correcto.
 - Build de producción: correcto.
-- ESLint: deuda heredada de 36 errores y 56 advertencias en la UI existente.
+- ESLint: deuda heredada de 36 errores y 52 advertencias en la UI existente.
 - Tests automatizados: 14 casos para contrato Vibe, mes/fecha CDMX, salud del
   negocio, límite de intentos y sesión firmada.
+- Smoke de producción: acceso anónimo redirigido, login `200`, `Finanzas` `200`,
+  resumen Vibe de agosto `200`, logout `200` y nueva redirección sin sesión.
 
 ## Vibe Marketing en Finanzas → Negocio
 
@@ -63,6 +65,11 @@ interna protegida por la sesión web. El servidor valida host, HTTPS, ruta,
 tamaño, timeout y contrato; las respuestas usan `Cache-Control: no-store`. Si la
 fuente no está disponible, el Health Check mantiene el registro manual como
 fallback y muestra el estado de la conexión.
+
+El corte productivo de agosto de 2026 está disponible con 5 productos y estado
+`PROVISIONAL`: Meta y ClicChat reportan `connected`; Plataforma reporta
+`not_configured`. Hasta configurar esa fuente, las ventas de Track A pueden
+estar incompletas y el tablero conserva la advertencia visible.
 
 ## API local v1
 
@@ -129,6 +136,10 @@ atómica con IDs deterministas.
 - Plataforma única: Vercel; el flujo durable es `main` → integración GitHub →
   deployment de producción.
 - Proyecto histórico: `mario-muros-projects/personal-tracker`.
+- Producción: `https://personal-tracker-brown.vercel.app`.
+- Base funcional publicada: `d29e52c`.
+- Upstream Vibe: `https://dashboard-wa-five.vercel.app`, commit `f6b3084`
+  —base funcional `2069755`—.
 - No se usa ChatGPT Sites y el proyecto no debe conservar
   `.openai/hosting.json`.
 
@@ -147,11 +158,14 @@ Variables de producción requeridas —solo nombres, nunca valores—:
 - `VIBE_EXPORT_URL`
 - `VIBE_EXPORT_ALLOWED_HOST`
 - `VIBE_EXPORT_TOKEN`
-- `VIBE_SITE_BYPASS_TOKEN` únicamente si el upstream privado heredado lo exige
 
-`.vercel/` permanece local e ignorado. Antes de subir `main`, vincula el scope
-correcto, configura las variables y ejecuta tests, TypeScript, lint focalizado,
-build y audit de dependencias.
+`VIBE_SITE_BYPASS_TOKEN` no está configurado ni es necesario: ambos componentes
+corren directamente en Vercel. Las tres variables de Vibe están configuradas en
+Production y Preview; los valores permanecen fuera del repositorio.
+
+`.vercel/` permanece local e ignorado. Para siguientes releases, conservar el
+flujo GitHub `main` → Vercel y ejecutar tests, TypeScript, lint focalizado, build,
+audit de dependencias y smoke remoto sin imprimir secretos ni cifras.
 
 ## Precaución
 
