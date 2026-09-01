@@ -42,9 +42,9 @@ Estado al 2026-09-01:
 - TypeScript: correcto.
 - Build de producción: correcto.
 - ESLint: deuda heredada de 36 errores y 48 advertencias en la UI existente.
-- Tests automatizados: 74 casos para contrato Vibe, mes/fecha CDMX, salud del
-  negocio, runway global, series recurrentes, límite de intentos y sesión
-  firmada.
+- Tests automatizados: 87 casos para contrato Vibe, mes/fecha CDMX, salud del
+  negocio, runway global, ingresos y gastos recurrentes, límite de intentos y
+  sesión firmada.
 - Smoke de producción: acceso anónimo redirigido, login `200`, `Finanzas` `200`,
   resumen Vibe de agosto `200`, logout `200` y nueva redirección sin sesión.
 
@@ -110,6 +110,15 @@ cancelación. La misma recurrencia se usa en Finanzas, Dashboard, Analítica, el
 resumen API y
 `GET /api/v1/finance/expenses?month=YYYY-MM`.
 
+Los ingresos con frecuencia `MENSUAL` también se registran una sola vez y se
+proyectan desde su mes inicial. Finanzas, Dashboard, Analítica y el resumen API
+comparten el mismo resolvedor y separan `PERSONAL` de `BUSINESS`. Editar un
+ingreso mensual agrega una versión efectiva en el mes CDMX actual; detenerlo
+agrega una cancelación y conserva el histórico. La identidad de la recurrencia
+queda fija, mientras que monto, prestaciones y horas pueden cambiar. Una fuente
+detenida puede reactivarse sin duplicarse. Los ingresos de otras frecuencias
+permanecen ligados únicamente a su mes declarado.
+
 ## API local v1
 
 La API usa `Authorization: Bearer <TRACKER_LOCAL_API_TOKEN>`. El token local solo
@@ -119,7 +128,8 @@ Endpoints iniciales:
 
 - `GET /api/v1/health` (liveness; no prueba acceso a Firestore)
 - `GET /api/v1/me`
-- `GET /api/v1/dashboard/summary?month=YYYY-MM`
+- `GET /api/v1/dashboard/summary?month=YYYY-MM&financialContext=ALL|PERSONAL|BUSINESS`
+  (`ALL` por defecto para conservar compatibilidad)
 - `GET /api/v1/finance/expenses`
 - `POST /api/v1/finance/expenses/preview`
 - `POST /api/v1/finance/expenses` con `Idempotency-Key`

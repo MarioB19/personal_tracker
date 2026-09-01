@@ -1,4 +1,9 @@
-import type { Expense, InfoproductFixedExpense } from "@/lib/types";
+import type {
+  Expense,
+  FinancialContext,
+  Income,
+  InfoproductFixedExpense,
+} from "@/lib/types";
 import type { VibeBusinessSummary } from "@/contracts/vibe-business";
 import { canonicalExpenseSeriesId } from "./expense-series.ts";
 
@@ -70,6 +75,276 @@ export type ExpenseRecurrenceRecord = {
   createdAt?: unknown;
   updatedAt?: unknown;
 };
+
+export type IncomeRecurrenceRecord = {
+  id?: string;
+  source?: string;
+  type?: Income["type"];
+  month?: string;
+  date?: string;
+  frequency?: Income["frequency"];
+  financialContext?: Income["financialContext"];
+  productId?: string;
+  productName?: string;
+  effectiveFrom?: string;
+  seriesId?: string;
+  recurrenceStatus?: "ACTIVE" | "CANCELLED";
+  revision?: number;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
+const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function declaredIncomeMonthKey(
+  income: Pick<IncomeRecurrenceRecord, "month" | "date">,
+): string | null {
+  if (income.month && MONTH_KEY_PATTERN.test(income.month)) {
+    return income.month;
+  }
+
+  const dateMonth = income.date?.slice(0, 7);
+  return dateMonth && MONTH_KEY_PATTERN.test(dateMonth) ? dateMonth : null;
+}
+
+function effectiveIncomeMonthKey(
+  income: Pick<IncomeRecurrenceRecord, "effectiveFrom" | "month" | "date">,
+): string | null {
+  if (
+    income.effectiveFrom &&
+    MONTH_KEY_PATTERN.test(income.effectiveFrom)
+  ) {
+    return income.effectiveFrom;
+  }
+  return declaredIncomeMonthKey(income);
+}
+
+function incomeFinancialContext(
+  income: Pick<IncomeRecurrenceRecord, "financialContext">,
+): FinancialContext {
+  return income.financialContext === "BUSINESS" ? "BUSINESS" : "PERSONAL";
+}
+
+export function canonicalRecurringIncomeIdentity(
+  income: IncomeRecurrenceRecord,
+): string {
+  const productIdentity = income.productId?.trim()
+    ? `id:${income.productId.trim()}`
+    : `name:${normalizeConcept(income.productName || "")}`;
+  return `income:${JSON.stringify([
+    incomeFinancialContext(income),
+    normalizeConcept(income.source || ""),
+    income.type || "OTRO",
+    productIdentity,
+  ])}`;
+}
+
+export function recurringIncomeIdentityMatches(
+  current: IncomeRecurrenceRecord,
+  requested: IncomeRecurrenceRecord,
+): boolean {
+  return (
+    canonicalRecurringIncomeIdentity(current) ===
+    canonicalRecurringIncomeIdentity(requested)
+  );
+}
+
+export function recurringIncomeSeriesId(
+  income: IncomeRecurrenceRecord,
+): string {
+  const explicitSeriesId = income.seriesId?.trim();
+  return explicitSeriesId || canonicalRecurringIncomeIdentity(income);
+}
+
+export function nextRecurringIncomeRevision(previousRevision?: number): number {
+  return typeof previousRevision === "number" &&
+    Number.isSafeInteger(previousRevision) &&
+    previousRevision >= 0
+    ? previousRevision + 1
+    : 1;
+}
+
+export type RecurringIncomeWriteDecision = {
+  previousRevision: number;
+  mode: "CREATE" | "APPEND_LEGACY" | "APPEND" | "REACTIVATE";
+};
+
+/**
+ * Decides a recurring-income write without touching Firestore. A null expected
+ * revision means a user is creating a new monthly source: it may create a new
+ * state or reactivate a cancelled one, but it must never join an active state.
+ */
+export function decideRecurringIncomeWrite(
+  state: { revision?: unknown; status?: unknown } | null,
+  expectedRevision: number | null,
+  requestedStatus: "ACTIVE" | "CANCELLED",
+): RecurringIncomeWriteDecision | null {
+  const validExpectedRevision =
+    expectedRevision === null ||
+    (Number.isSafeInteger(expectedRevision) &&
+      expectedRevision >= 0 &&
+      expectedRevision < Number.MAX_SAFE_INTEGER);
+  if (!validExpectedRevision) return null;
+
+  if (!state) {
+    if (expectedRevision === null) {
+      return requestedStatus === "ACTIVE"
+        ? { previousRevision: 0, mode: "CREATE" }
+        : null;
+    }
+    return expectedRevision === 0
+      ? { previousRevision: 0, mode: "APPEND_LEGACY" }
+      : null;
+  }
+
+  const storedRevision = state.revision;
+  const storedStatus = state.status;
+  if (
+    !Number.isSafeInteger(storedRevision) ||
+    (storedRevision as number) < 0 ||
+    (storedRevision as number) >= Number.MAX_SAFE_INTEGER ||
+    (storedStatus !== "ACTIVE" && storedStatus !== "CANCELLED")
+  ) {
+    return null;
+  }
+
+  if (expectedRevision === null) {
+    return storedStatus === "CANCELLED" && requestedStatus === "ACTIVE"
+      ? {
+          previousRevision: storedRevision as number,
+          mode: "REACTIVATE",
+        }
+      : null;
+  }
+
+  if (storedStatus !== "ACTIVE" || storedRevision !== expectedRevision) {
+    return null;
+  }
+  return { previousRevision: storedRevision as number, mode: "APPEND" };
+}
+
+export type IncomeLifecycleAction =
+  | "CREATE_RECURRING"
+  | "APPEND_RECURRING"
+  | "CREATE_ONE_OFF"
+  | "UPDATE_ONE_OFF"
+  | "REJECT_FREQUENCY_CHANGE";
+
+export function incomeLifecycleAction(
+  existingFrequency: Income["frequency"] | null,
+  requestedFrequency: Income["frequency"],
+): IncomeLifecycleAction {
+  if (
+    existingFrequency !== null &&
+    existingFrequency !== requestedFrequency
+  ) {
+    return "REJECT_FREQUENCY_CHANGE";
+  }
+  if (requestedFrequency === "MENSUAL") {
+    return existingFrequency === null
+      ? "CREATE_RECURRING"
+      : "APPEND_RECURRING";
+  }
+  return existingFrequency === null ? "CREATE_ONE_OFF" : "UPDATE_ONE_OFF";
+}
+
+export function incomeRemovalAction(
+  frequency: Income["frequency"],
+): "APPEND_CANCELLATION" | "DELETE_ONE_OFF" {
+  return frequency === "MENSUAL"
+    ? "APPEND_CANCELLATION"
+    : "DELETE_ONE_OFF";
+}
+
+type IncomeVersionCandidate<T extends IncomeRecurrenceRecord> = {
+  income: T;
+  index: number;
+  effectiveFrom: string;
+  revision: number;
+  timestamp: number;
+  id: string;
+};
+
+function newerIncomeVersion<T extends IncomeRecurrenceRecord>(
+  candidate: IncomeVersionCandidate<T>,
+  current: IncomeVersionCandidate<T>,
+): boolean {
+  if (candidate.effectiveFrom !== current.effectiveFrom) {
+    return candidate.effectiveFrom > current.effectiveFrom;
+  }
+  if (candidate.revision !== current.revision) {
+    return candidate.revision > current.revision;
+  }
+  if (candidate.timestamp !== current.timestamp) {
+    return candidate.timestamp > current.timestamp;
+  }
+  return candidate.id > current.id;
+}
+
+/**
+ * Resolves income records without mutating or materializing Firestore data.
+ * Only explicitly monthly income recurs. Monthly captures with the same
+ * stable identity are versions of one source, so a later capture replaces the
+ * previous amount instead of accumulating forever. Every other cadence remains
+ * an independent record tied to its declared month.
+ */
+export function resolveIncomesForMonth<T extends IncomeRecurrenceRecord>(
+  incomes: T[],
+  targetMonth: string,
+  financialContext?: FinancialContext,
+): T[] {
+  if (!MONTH_KEY_PATTERN.test(targetMonth)) return [];
+
+  const oneOff: Array<{ income: T; index: number }> = [];
+  const recurring = new Map<string, IncomeVersionCandidate<T>>();
+
+  incomes.forEach((income, index) => {
+    if (income.frequency !== "MENSUAL") {
+      const declaredMonth = declaredIncomeMonthKey(income);
+      if (
+        declaredMonth === targetMonth &&
+        (!financialContext ||
+          incomeFinancialContext(income) === financialContext)
+      ) {
+        oneOff.push({ income, index });
+      }
+      return;
+    }
+
+    const effectiveFrom = effectiveIncomeMonthKey(income);
+    if (!effectiveFrom || effectiveFrom > targetMonth) return;
+
+    const candidate: IncomeVersionCandidate<T> = {
+      income,
+      index,
+      effectiveFrom,
+      revision:
+        typeof income.revision === "number" && Number.isFinite(income.revision)
+          ? income.revision
+          : 0,
+      timestamp:
+        timestampMillis(income.updatedAt) || timestampMillis(income.createdAt),
+      id: income.id || "",
+    };
+    const seriesId = recurringIncomeSeriesId(income);
+    const current = recurring.get(seriesId);
+    if (!current || newerIncomeVersion(candidate, current)) {
+      recurring.set(seriesId, candidate);
+    }
+  });
+
+  const activeRecurring = Array.from(recurring.values())
+    .filter(
+      (candidate) =>
+        candidate.income.recurrenceStatus !== "CANCELLED" &&
+        (!financialContext ||
+          incomeFinancialContext(candidate.income) === financialContext),
+    );
+
+  return [...oneOff, ...activeRecurring]
+    .sort((left, right) => left.index - right.index)
+    .map((candidate) => candidate.income);
+}
 
 export function isVibeBusinessSummaryComplete(
   summary: Pick<VibeBusinessSummary, "status" | "quality">,

@@ -13,6 +13,7 @@ import { formatCurrency, formatPercent, cn, normalizeActivityName } from "@/lib/
 import {
   addMonthsToMonthKey,
   resolveExpensesForMonth,
+  resolveIncomesForMonth,
 } from "@/lib/finance/business-metrics";
 import { monthInMexicoCity } from "@/lib/time/month";
 import {
@@ -193,28 +194,43 @@ export default function AnaliticaPage() {
   // 1. Incomes & Expenses (applied to all active tracking months starting from March 2026)
   const filteredIncomes = useMemo(() => {
     if (isHistorical) {
-      return incomes.filter(
-        (income) =>
-          income.month >= FINANCE_TRACKING_START_MONTH &&
-          income.month <= liveMonthKey,
+      return historicalMonthKeys.flatMap((month) =>
+        resolveIncomesForMonth(incomes, month, "PERSONAL").map((income) => ({
+          ...income,
+          id: `${month}:${income.id}`,
+        })),
       );
     }
-    if (currentMonthKey < FINANCE_TRACKING_START_MONTH) return [];
-    return incomes.filter((income) => income.month === currentMonthKey);
-  }, [incomes, isHistorical, currentMonthKey, liveMonthKey]);
+    if (
+      currentMonthKey < FINANCE_TRACKING_START_MONTH ||
+      currentMonthKey > liveMonthKey
+    ) return [];
+    return resolveIncomesForMonth(incomes, currentMonthKey, "PERSONAL");
+  }, [incomes, isHistorical, currentMonthKey, historicalMonthKeys, liveMonthKey]);
 
   const filteredExpenses = useMemo(() => {
     if (isHistorical) {
       return historicalMonthKeys.flatMap((month) =>
-        resolveExpensesForMonth(expenses, month).map((expense) => ({
-          ...expense,
-          id: `${month}:${expense.id}`,
-        })),
+        resolveExpensesForMonth(expenses, month)
+          .filter(
+            (expense) =>
+              (expense.financialContext || "PERSONAL") === "PERSONAL",
+          )
+          .map((expense) => ({
+            ...expense,
+            id: `${month}:${expense.id}`,
+          })),
       );
     }
-    if (currentMonthKey < FINANCE_TRACKING_START_MONTH) return [];
-    return resolveExpensesForMonth(expenses, currentMonthKey);
-  }, [expenses, currentMonthKey, historicalMonthKeys, isHistorical]);
+    if (
+      currentMonthKey < FINANCE_TRACKING_START_MONTH ||
+      currentMonthKey > liveMonthKey
+    ) return [];
+    return resolveExpensesForMonth(expenses, currentMonthKey).filter(
+      (expense) =>
+        (expense.financialContext || "PERSONAL") === "PERSONAL",
+    );
+  }, [expenses, currentMonthKey, historicalMonthKeys, isHistorical, liveMonthKey]);
 
   // 2. Goals
   const filteredGoals = useMemo(() => {
@@ -298,9 +314,13 @@ export default function AnaliticaPage() {
   // B. Financial Balance
   const totalIncomeValue = filteredIncomes.reduce((sum, i) => sum + i.netIncome, 0);
   // Debt records do not preserve an activation/cancellation timeline, so the
-  // current minimum payment remains a point-in-time obligation. Multiplying it
-  // backwards would invent payments for months before a debt existed.
-  const totalExpenseValue = filteredExpenses.reduce((sum, e) => sum + e.amount, 0) + totalMinPayment;
+  // current minimum payment only belongs to the live CDMX month. Historical
+  // mode aggregates that point-in-time obligation exactly once.
+  const applicableMinimumDebtPayment =
+    isHistorical || currentMonthKey === liveMonthKey ? totalMinPayment : 0;
+  const totalExpenseValue =
+    filteredExpenses.reduce((sum, e) => sum + e.amount, 0) +
+    applicableMinimumDebtPayment;
   const monthlyBalanceValue = totalIncomeValue - totalExpenseValue;
   const savingsRate = totalIncomeValue > 0 ? (monthlyBalanceValue / totalIncomeValue) * 100 : 0;
   const historicalDayCount = historicalMonthKeys.reduce((days, monthKey) => {
@@ -313,12 +333,20 @@ export default function AnaliticaPage() {
   
   // Previous Month balance (for trend calculations)
   const prevMonthIncomes = prevMonthKey >= FINANCE_TRACKING_START_MONTH
-    ? incomes.filter((income) => income.month === prevMonthKey)
+    ? resolveIncomesForMonth(incomes, prevMonthKey, "PERSONAL")
     : [];
   const prevMonthExpenses = prevMonthKey >= FINANCE_TRACKING_START_MONTH
-    ? resolveExpensesForMonth(expenses, prevMonthKey)
+    ? resolveExpensesForMonth(expenses, prevMonthKey).filter(
+        (expense) =>
+          (expense.financialContext || "PERSONAL") === "PERSONAL",
+      )
     : [];
-  const prevMonthBalance = prevMonthIncomes.reduce((s, i) => s + i.netIncome, 0) - (prevMonthExpenses.reduce((s, e) => s + e.amount, 0) + totalMinPayment);
+  const prevMonthMinimumDebtPayment =
+    prevMonthKey === liveMonthKey ? totalMinPayment : 0;
+  const prevMonthBalance =
+    prevMonthIncomes.reduce((s, i) => s + i.netIncome, 0) -
+    (prevMonthExpenses.reduce((s, e) => s + e.amount, 0) +
+      prevMonthMinimumDebtPayment);
   const balanceTrendIsUp = monthlyBalanceValue >= prevMonthBalance;
 
   // C. Missions Completion
@@ -348,17 +376,28 @@ export default function AnaliticaPage() {
     
     for (let mIdx = 0; mIdx < 12; mIdx++) {
       const monthKey = `${selectedYear}-${String(mIdx + 1).padStart(2, "0")}`;
-      if (monthKey >= FINANCE_TRACKING_START_MONTH) {
-        monthlyDataMap[mIdx].income = incomes
-          .filter((income) => income.month === monthKey)
+      if (
+        monthKey >= FINANCE_TRACKING_START_MONTH &&
+        monthKey <= liveMonthKey
+      ) {
+        monthlyDataMap[mIdx].income = resolveIncomesForMonth(
+          incomes,
+          monthKey,
+          "PERSONAL",
+        )
           .reduce((sum, income) => sum + income.netIncome, 0);
         monthlyDataMap[mIdx].expense = resolveExpensesForMonth(expenses, monthKey)
-          .reduce((s, e) => s + e.amount, 0) + totalMinPayment;
+          .filter(
+            (expense) =>
+              (expense.financialContext || "PERSONAL") === "PERSONAL",
+          )
+          .reduce((s, e) => s + e.amount, 0) +
+          (monthKey === liveMonthKey ? totalMinPayment : 0);
       }
     }
 
     return Object.values(monthlyDataMap);
-  }, [incomes, expenses, selectedYear, totalMinPayment]);
+  }, [incomes, expenses, liveMonthKey, selectedYear, totalMinPayment]);
 
   // Active month name for drawing trend lines
   const activeMonthNameShort = MONTH_SHORT[selectedMonth - 1];

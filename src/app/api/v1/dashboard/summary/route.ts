@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 const querySchema = z.object({
   month: monthSchema.optional(),
+  financialContext: z.enum(["ALL", "PERSONAL", "BUSINESS"]).optional(),
 });
 
 export async function GET(request: Request) {
@@ -24,7 +25,11 @@ export async function GET(request: Request) {
       Object.fromEntries(url.searchParams.entries()),
     );
     const month = query.month ?? currentMonthInMexicoCity();
-    const summary = await getDashboardSummary(principal.trackerUserId, month);
+    const summary = await getDashboardSummary(
+      principal.trackerUserId,
+      month,
+      query.financialContext ?? "ALL",
+    );
     return apiSuccess(summary, requestId);
   } catch (error) {
     return apiFailure(error, requestId);

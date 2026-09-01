@@ -3,14 +3,461 @@ import test from "node:test";
 
 import {
   businessExpenseAppliesToMonth,
+  canonicalRecurringIncomeIdentity,
   calculateBusinessPosition,
+  decideRecurringIncomeWrite,
+  incomeLifecycleAction,
+  incomeRemovalAction,
   isVibeBusinessSummaryComplete,
+  nextRecurringIncomeRevision,
+  recurringIncomeIdentityMatches,
+  recurringIncomeSeriesId,
   resolveCombinedBusinessFixedExpenses,
   resolveExpensesForMonth,
+  resolveIncomesForMonth,
   resolveRecurringFixedExpenses,
   totalRecurringFixedExpenses,
   totalRecurringFixedExpensesForMonths,
 } from "../src/lib/finance/business-metrics.ts";
+
+test("la identidad mensual es estable y la revisión avanza un paso", () => {
+  const first = {
+    source: " Sueldo Ástra ",
+    type: "SALARIO",
+    financialContext: "PERSONAL",
+    productName: "Producto Uno",
+  };
+  const normalizedCopy = {
+    source: "sueldo-astra",
+    type: "SALARIO",
+    financialContext: "PERSONAL",
+    productName: "producto uno",
+  };
+
+  assert.equal(
+    recurringIncomeSeriesId(first),
+    recurringIncomeSeriesId(normalizedCopy),
+  );
+  assert.equal(
+    recurringIncomeSeriesId({ ...first, seriesId: "income:explicit" }),
+    "income:explicit",
+  );
+  assert.equal(
+    canonicalRecurringIncomeIdentity({
+      ...first,
+      seriesId: "income:explicit",
+    }),
+    canonicalRecurringIncomeIdentity(first),
+  );
+  assert.equal(nextRecurringIncomeRevision(), 1);
+  assert.equal(nextRecurringIncomeRevision(7), 8);
+});
+
+test("la identidad de una recurrencia se congela pero sus montos pueden cambiar", () => {
+  const recurring = {
+    source: "Sueldo Astra",
+    type: "SALARIO",
+    financialContext: "PERSONAL",
+    productId: "product-1",
+    productName: "Producto Uno",
+    baseSalary: 20_000,
+    benefits: 1_000,
+    hoursPerMonth: 160,
+  };
+
+  assert.equal(
+    recurringIncomeIdentityMatches(recurring, {
+      ...recurring,
+      baseSalary: 25_000,
+      benefits: 2_000,
+      hoursPerMonth: 140,
+    }),
+    true,
+  );
+  assert.equal(
+    recurringIncomeIdentityMatches(recurring, {
+      ...recurring,
+      source: "Otra empresa",
+    }),
+    false,
+  );
+  assert.equal(
+    recurringIncomeIdentityMatches(recurring, {
+      ...recurring,
+      type: "FREELANCE",
+    }),
+    false,
+  );
+  assert.equal(
+    recurringIncomeIdentityMatches(recurring, {
+      ...recurring,
+      financialContext: "BUSINESS",
+    }),
+    false,
+  );
+  assert.equal(
+    recurringIncomeIdentityMatches(recurring, {
+      ...recurring,
+      productId: "product-2",
+    }),
+    false,
+  );
+  assert.equal(
+    recurringIncomeIdentityMatches(
+      { ...recurring, productId: undefined, productName: "Producto Uno" },
+      { ...recurring, productId: undefined, productName: "Producto Dos" },
+    ),
+    false,
+  );
+});
+
+test("una alta mensual crea, choca con ACTIVE y reactiva solo CANCELLED", () => {
+  assert.deepEqual(decideRecurringIncomeWrite(null, null, "ACTIVE"), {
+    previousRevision: 0,
+    mode: "CREATE",
+  });
+  assert.equal(
+    decideRecurringIncomeWrite(
+      { revision: 3, status: "ACTIVE" },
+      null,
+      "ACTIVE",
+    ),
+    null,
+  );
+  assert.deepEqual(
+    decideRecurringIncomeWrite(
+      { revision: 4, status: "CANCELLED" },
+      null,
+      "ACTIVE",
+    ),
+    { previousRevision: 4, mode: "REACTIVATE" },
+  );
+  assert.equal(
+    decideRecurringIncomeWrite(
+      { revision: 4, status: "CANCELLED" },
+      null,
+      "CANCELLED",
+    ),
+    null,
+  );
+  assert.equal(
+    decideRecurringIncomeWrite(
+      { revision: 4, status: "CANCELLED" },
+      4,
+      "ACTIVE",
+    ),
+    null,
+  );
+});
+
+test("una versión normal exige revisión vigente y legacy puede iniciar su state", () => {
+  assert.deepEqual(
+    decideRecurringIncomeWrite(
+      { revision: 7, status: "ACTIVE" },
+      7,
+      "CANCELLED",
+    ),
+    { previousRevision: 7, mode: "APPEND" },
+  );
+  assert.equal(
+    decideRecurringIncomeWrite(
+      { revision: 7, status: "ACTIVE" },
+      6,
+      "ACTIVE",
+    ),
+    null,
+  );
+  assert.deepEqual(decideRecurringIncomeWrite(null, 0, "ACTIVE"), {
+    previousRevision: 0,
+    mode: "APPEND_LEGACY",
+  });
+  assert.equal(decideRecurringIncomeWrite(null, 2, "ACTIVE"), null);
+});
+
+test("el ciclo de vida rechaza cambios de frecuencia y conserva one-offs", () => {
+  assert.equal(
+    incomeLifecycleAction(null, "MENSUAL"),
+    "CREATE_RECURRING",
+  );
+  assert.equal(
+    incomeLifecycleAction("MENSUAL", "MENSUAL"),
+    "APPEND_RECURRING",
+  );
+  assert.equal(
+    incomeLifecycleAction("MENSUAL", "UNICO"),
+    "REJECT_FREQUENCY_CHANGE",
+  );
+  assert.equal(
+    incomeLifecycleAction("UNICO", "MENSUAL"),
+    "REJECT_FREQUENCY_CHANGE",
+  );
+  assert.equal(incomeLifecycleAction(null, "UNICO"), "CREATE_ONE_OFF");
+  assert.equal(incomeLifecycleAction("UNICO", "UNICO"), "UPDATE_ONE_OFF");
+  assert.equal(incomeRemovalAction("MENSUAL"), "APPEND_CANCELLATION");
+  assert.equal(incomeRemovalAction("UNICO"), "DELETE_ONE_OFF");
+});
+
+test("solo los ingresos mensuales recurren desde su mes inicial", () => {
+  const incomes = [
+    {
+      id: "salary",
+      month: "2026-08",
+      frequency: "MENSUAL",
+      financialContext: "PERSONAL",
+    },
+    {
+      id: "sale",
+      month: "2026-08",
+      frequency: "UNICO",
+      financialContext: "BUSINESS",
+    },
+  ];
+
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-07").map((income) => income.id),
+    [],
+  );
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-08").map((income) => income.id),
+    ["salary", "sale"],
+  );
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-09").map((income) => income.id),
+    ["salary"],
+  );
+});
+
+test("las frecuencias no mensuales solo aplican en su mes declarado", () => {
+  for (const frequency of ["QUINCENAL", "SEMANAL", "ANUAL", "UNICO", undefined]) {
+    const income = { id: String(frequency), month: "2026-08", frequency };
+    assert.deepEqual(resolveIncomesForMonth([income], "2026-08"), [income]);
+    assert.deepEqual(resolveIncomesForMonth([income], "2026-09"), []);
+  }
+});
+
+test("el ingreso usa la fecha como fallback cuando el mes falta o es inválido", () => {
+  const missingMonth = {
+    id: "missing-month",
+    date: "2026-08-15",
+    frequency: "MENSUAL",
+  };
+  const invalidMonth = {
+    id: "invalid-month",
+    month: "agosto",
+    date: "2026-08-20",
+    frequency: "UNICO",
+  };
+
+  assert.deepEqual(
+    resolveIncomesForMonth([missingMonth], "2026-09"),
+    [missingMonth],
+  );
+  assert.deepEqual(
+    resolveIncomesForMonth([invalidMonth], "2026-08"),
+    [invalidMonth],
+  );
+  assert.deepEqual(resolveIncomesForMonth([invalidMonth], "2026-09"), []);
+});
+
+test("el filtro de contexto considera PERSONAL a los ingresos legacy", () => {
+  const incomes = [
+    { id: "legacy", month: "2026-08", frequency: "MENSUAL" },
+    {
+      id: "business",
+      month: "2026-08",
+      frequency: "MENSUAL",
+      financialContext: "BUSINESS",
+    },
+  ];
+  const original = structuredClone(incomes);
+
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-09", "PERSONAL").map(
+      (income) => income.id,
+    ),
+    ["legacy"],
+  );
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-09", "BUSINESS").map(
+      (income) => income.id,
+    ),
+    ["business"],
+  );
+  assert.deepEqual(incomes, original);
+});
+
+test("una captura mensual posterior reemplaza la versión anterior de la fuente", () => {
+  const common = {
+    source: "Sueldo Ástra",
+    type: "SALARIO",
+    frequency: "MENSUAL",
+    financialContext: "PERSONAL",
+  };
+  const incomes = [
+    {
+      ...common,
+      id: "august",
+      month: "2026-08",
+      netIncome: 20_000,
+      revision: 50,
+      updatedAt: new Date("2026-12-01T00:00:00Z"),
+    },
+    {
+      ...common,
+      id: "september-r1",
+      source: "  sueldo-astra  ",
+      month: "2026-09",
+      effectiveFrom: "2026-09",
+      netIncome: 21_000,
+      revision: 1,
+      updatedAt: new Date("2026-09-01T00:00:00Z"),
+    },
+    {
+      ...common,
+      id: "september-r2-old",
+      source: "sueldo astra",
+      month: "2026-09",
+      effectiveFrom: "2026-09",
+      netIncome: 22_000,
+      revision: 2,
+      updatedAt: new Date("2026-09-02T00:00:00Z"),
+    },
+    {
+      ...common,
+      id: "september-r2-y",
+      month: "2026-09",
+      effectiveFrom: "2026-09",
+      netIncome: 23_000,
+      revision: 2,
+      updatedAt: new Date("2026-09-03T00:00:00Z"),
+    },
+    {
+      ...common,
+      id: "september-r2-z",
+      month: "2026-09",
+      effectiveFrom: "2026-09",
+      netIncome: 24_000,
+      revision: 2,
+      updatedAt: new Date("2026-09-03T00:00:00Z"),
+    },
+  ];
+
+  assert.equal(resolveIncomesForMonth(incomes, "2026-08")[0].id, "august");
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-10").map((income) => income.id),
+    ["september-r2-z"],
+  );
+});
+
+test("una serie legacy pasa a versiones append-only sin perder su historial", () => {
+  const legacy = {
+    id: "salary-legacy",
+    source: "Sueldo Astra",
+    type: "SALARIO",
+    frequency: "MENSUAL",
+    financialContext: "PERSONAL",
+    month: "2026-08",
+    date: "2026-08-15",
+    netIncome: 20_000,
+  };
+  const seriesId = recurringIncomeSeriesId(legacy);
+  const septemberVersion = {
+    ...legacy,
+    id: "salary-september",
+    seriesId,
+    month: "2026-09",
+    date: "2026-09-01",
+    effectiveFrom: "2026-09",
+    netIncome: 22_000,
+    recurrenceStatus: "ACTIVE",
+    revision: 1,
+  };
+  const activeLedger = [legacy, septemberVersion];
+
+  assert.equal(resolveIncomesForMonth(activeLedger, "2026-08")[0].netIncome, 20_000);
+  assert.equal(resolveIncomesForMonth(activeLedger, "2026-09")[0].netIncome, 22_000);
+
+  const septemberTombstone = {
+    ...septemberVersion,
+    id: "salary-stop",
+    recurrenceStatus: "CANCELLED",
+    revision: 2,
+  };
+  const stoppedLedger = [...activeLedger, septemberTombstone];
+
+  assert.equal(resolveIncomesForMonth(stoppedLedger, "2026-08")[0].netIncome, 20_000);
+  assert.deepEqual(resolveIncomesForMonth(stoppedLedger, "2026-09"), []);
+  assert.deepEqual(resolveIncomesForMonth(stoppedLedger, "2027-01"), []);
+});
+
+test("dos fuentes mensuales distintas permanecen como ingresos independientes", () => {
+  const incomes = [
+    {
+      id: "astra",
+      source: "Astra",
+      type: "SALARIO",
+      month: "2026-08",
+      frequency: "MENSUAL",
+    },
+    {
+      id: "freelance",
+      source: "Cliente independiente",
+      type: "FREELANCE",
+      month: "2026-08",
+      frequency: "MENSUAL",
+    },
+  ];
+
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-09").map((income) => income.id),
+    ["astra", "freelance"],
+  );
+});
+
+test("cancelar una serie mensual no cancela ingresos no mensuales", () => {
+  const incomes = [
+    {
+      id: "salary-active",
+      seriesId: "salary",
+      source: "Sueldo",
+      type: "SALARIO",
+      month: "2026-08",
+      effectiveFrom: "2026-08",
+      frequency: "MENSUAL",
+      recurrenceStatus: "ACTIVE",
+      revision: 1,
+    },
+    {
+      id: "salary-stop",
+      seriesId: "salary",
+      source: "Sueldo",
+      type: "SALARIO",
+      month: "2026-09",
+      effectiveFrom: "2026-09",
+      frequency: "MENSUAL",
+      recurrenceStatus: "CANCELLED",
+      revision: 2,
+    },
+    {
+      id: "annual-payment",
+      source: "Bono anual",
+      type: "OTRO",
+      month: "2026-09",
+      frequency: "ANUAL",
+      recurrenceStatus: "CANCELLED",
+    },
+  ];
+
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-08").map((income) => income.id),
+    ["salary-active"],
+  );
+  assert.deepEqual(
+    resolveIncomesForMonth(incomes, "2026-09").map((income) => income.id),
+    ["annual-payment"],
+  );
+  assert.deepEqual(resolveIncomesForMonth(incomes, "2026-10"), []);
+});
 
 test("solo un cierre Vibe final y sin fuentes incompletas se considera confirmado", () => {
   const completeQuality = {

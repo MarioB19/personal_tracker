@@ -5,6 +5,7 @@ import { useUid } from "@/lib/hooks/useAuth";
 import {
   getAllFinance,
   createFinance,
+  createRecurringIncomeVersion,
   createRecurringExpenseVersion,
   FinanceRecurrenceConflictError,
   updateFinance,
@@ -70,8 +71,13 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { dateInMexicoCity, monthInMexicoCity } from "@/lib/time/month";
 import {
+  incomeLifecycleAction,
+  incomeRemovalAction,
+  recurringIncomeIdentityMatches,
   recurringBusinessExpenseSeriesId,
+  recurringIncomeSeriesId,
   resolveExpensesForMonth,
+  resolveIncomesForMonth,
 } from "@/lib/finance/business-metrics";
 import {
   findActiveExpenseIdentityConflict,
@@ -476,10 +482,11 @@ export default function FinanzasPage() {
     .filter((d) => d.status === "ACTIVE")
     .reduce((sum, d) => sum + d.minimumPayment, 0);
 
-  const monthlyIncomesList = incomes.filter((inc) => {
-    const ctx = inc.financialContext || "PERSONAL";
-    return ctx === financialContext && inc.month === currentMonth;
-  });
+  const monthlyIncomesList = resolveIncomesForMonth(
+    incomes,
+    currentMonth,
+    financialContext,
+  );
 
   // Resolve the complete series first. Filtering before resolution can revive
   // an obsolete version when a series changes financial context.
@@ -489,6 +496,12 @@ export default function FinanzasPage() {
         (expense.financialContext || "PERSONAL") === financialContext,
     );
   const businessExpenses = expenses;
+  const editingIncomeRecord = editingId
+    ? incomes.find((income) => income.id === editingId)
+    : undefined;
+  const editingMonthlyIncome = Boolean(
+    editingIncomeRecord?.frequency === "MENSUAL",
+  );
   const editingExpenseRecord = editingId
     ? expenses.find((expense) => expense.id === editingId)
     : undefined;
@@ -693,6 +706,7 @@ export default function FinanzasPage() {
   };
 
   const openEditIncome = (i: Income) => {
+    const isMonthly = i.frequency === "MENSUAL";
     setEditingId(i.id);
     setISource(i.source);
     setIType(i.type);
@@ -702,7 +716,14 @@ export default function FinanzasPage() {
     setIHours(i.hoursPerMonth?.toString() || "160");
     setIProductId(i.productId || "");
     setIProductName(i.productName || "");
-    setIDate(i.date || (i.createdAt?.toDate ? dateInMexicoCity(i.createdAt.toDate()) : `${i.month}-01`));
+    setIDate(
+      isMonthly
+        ? dateInMexicoCity()
+        : i.date ||
+            (i.createdAt?.toDate
+              ? dateInMexicoCity(i.createdAt.toDate())
+              : `${i.month}-01`),
+    );
     setModal("income");
   };
 
@@ -760,6 +781,22 @@ export default function FinanzasPage() {
     if (!uid || !iSource.trim()) return;
     const existingItem = editingId ? incomes.find((item) => item.id === editingId) : null;
     const targetCtx = existingItem?.financialContext || financialContext;
+    const existingFrequency = existingItem?.frequency ||
+      (targetCtx === "BUSINESS" ? "UNICO" : "MENSUAL");
+    const lifecycleAction = incomeLifecycleAction(
+      existingItem ? existingFrequency : null,
+      iFreq || (targetCtx === "BUSINESS" ? "UNICO" : "MENSUAL"),
+    );
+    if (lifecycleAction === "REJECT_FREQUENCY_CHANGE") {
+      window.alert(
+        "Para proteger el historial no se puede cambiar la frecuencia al editar. Detén la recurrencia o crea un ingreso nuevo.",
+      );
+      return;
+    }
+    const targetFrequency = existingItem ? existingFrequency : iFreq;
+    const targetIsMonthly =
+      lifecycleAction === "CREATE_RECURRING" ||
+      lifecycleAction === "APPEND_RECURRING";
 
     const base = Number(iBase) || 0;
     const benefits = targetCtx === "BUSINESS" ? 0 : Number(iBenefits) || 0;
@@ -768,7 +805,9 @@ export default function FinanzasPage() {
 
     const selectedProd = products.find((p) => p.id === iProductId);
     const finalProdName = selectedProd ? selectedProd.name : iProductName.trim();
-    const finalDate = iDate || dateInMexicoCity();
+    const finalDate = targetIsMonthly
+      ? dateInMexicoCity()
+      : iDate || dateInMexicoCity();
 
     const payload = {
       source: iSource.trim(),
@@ -776,7 +815,7 @@ export default function FinanzasPage() {
       baseSalary: base,
       benefits,
       netIncome: net,
-      frequency: iFreq || (targetCtx === "BUSINESS" ? "UNICO" : "MENSUAL"),
+      frequency: targetFrequency,
       hoursPerMonth: hours,
       costPerHour: hours > 0 ? Math.round(net / hours) : 0,
       month: finalDate.slice(0, 7),
@@ -786,8 +825,45 @@ export default function FinanzasPage() {
       productName: finalProdName || undefined,
       notes: "",
     };
-    if (editingId) await updateFinance(uid, "income", editingId, payload);
-    else await createFinance(uid, "income", payload);
+    if (targetIsMonthly) {
+      if (
+        existingItem &&
+        !recurringIncomeIdentityMatches(existingItem, payload)
+      ) {
+        window.alert(
+          "La fuente, tipo, producto y contexto identifican esta recurrencia y no se pueden cambiar. Crea un ingreso nuevo si necesitas otra identidad.",
+        );
+        return;
+      }
+      const seriesId = recurringIncomeSeriesId(existingItem || payload);
+      try {
+        await createRecurringIncomeVersion(
+          uid,
+          {
+            ...payload,
+            frequency: "MENSUAL" as const,
+            effectiveFrom: currentMonth,
+            seriesId,
+            recurrenceStatus: "ACTIVE" as const,
+          },
+          existingItem ? existingItem.revision ?? 0 : null,
+          currentMonth,
+        );
+      } catch (error) {
+        if (error instanceof FinanceRecurrenceConflictError) {
+          window.alert(
+            "Este ingreso cambió en otra operación. Recargamos los datos para que revises la versión vigente.",
+          );
+          await loadData();
+          return;
+        }
+        throw error;
+      }
+    } else if (lifecycleAction === "UPDATE_ONE_OFF" && editingId) {
+      await updateFinance(uid, "income", editingId, payload);
+    } else {
+      await createFinance(uid, "income", payload);
+    }
     resetIncomeForm();
     closeModal();
     loadData();
@@ -1023,6 +1099,51 @@ export default function FinanzasPage() {
      }
     setMName(""); setMTarget(""); setMCurrent("");
     closeModal();
+    loadData();
+  };
+
+  const stopRecurringIncome = async (income: Income) => {
+    if (!uid || income.frequency !== "MENSUAL") return;
+    const confirmed = window.confirm(
+      `¿Detener “${income.source}” desde ${currentMonth}? Los meses anteriores conservarán su historial.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await createRecurringIncomeVersion(
+        uid,
+        {
+          source: income.source,
+          type: income.type,
+          baseSalary: income.baseSalary,
+          benefits: income.benefits,
+          netIncome: income.netIncome,
+          frequency: "MENSUAL",
+          hoursPerMonth: income.hoursPerMonth,
+          costPerHour: income.costPerHour,
+          effectiveFrom: currentMonth,
+          seriesId: recurringIncomeSeriesId(income),
+          recurrenceStatus: "CANCELLED",
+          month: currentMonth,
+          date: dateInMexicoCity(),
+          financialContext: income.financialContext || "PERSONAL",
+          productId: income.productId,
+          productName: income.productName,
+          notes: income.notes || "",
+        },
+        income.revision ?? 0,
+        currentMonth,
+      );
+    } catch (error) {
+      if (error instanceof FinanceRecurrenceConflictError) {
+        window.alert(
+          "Este ingreso cambió en otra operación. Recargamos los datos para que revises la versión vigente.",
+        );
+        await loadData();
+        return;
+      }
+      throw error;
+    }
     loadData();
   };
 
@@ -1595,7 +1716,11 @@ export default function FinanzasPage() {
                       </span>
                     }
                     onEdit={() => openEditIncome(i)}
-                    onDelete={() => deleteItem("income", i.id)}
+                    onDelete={() =>
+                      incomeRemovalAction(i.frequency) === "APPEND_CANCELLATION"
+                        ? stopRecurringIncome(i)
+                        : deleteItem("income", i.id)
+                    }
                   />
                 );
               })}
@@ -2203,8 +2328,9 @@ export default function FinanzasPage() {
                         <input 
                           value={iSource} 
                           onChange={(e) => setISource(e.target.value)} 
+                          disabled={editingMonthlyIncome}
                           placeholder="Ej: Venta de 2 paquetes, Cliente Juan Pérez" 
-                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </div>
 
@@ -2220,7 +2346,8 @@ export default function FinanzasPage() {
                               if (sel) setIProductName(sel.name);
                               else if (!pid) setIProductName("");
                             }}
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                            disabled={editingMonthlyIncome}
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="" className="bg-zinc-900">-- Ningún producto asignado (Venta General) --</option>
                             {products.map((p) => (
@@ -2234,20 +2361,24 @@ export default function FinanzasPage() {
                             list="products-suggestions"
                             value={iProductName} 
                             onChange={(e) => setIProductName(e.target.value)} 
+                            disabled={editingMonthlyIncome}
                             placeholder="Ej: Moldes para Coser, Postres para Vender" 
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                           />
                         )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Fecha del Ingreso</label>
+                          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
+                            {iFreq === "MENSUAL" ? "Inicio / cambio desde" : "Fecha del Ingreso"}
+                          </label>
                           <input 
                             type="date" 
                             value={iDate} 
                             onChange={(e) => setIDate(e.target.value)} 
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
+                            disabled={iFreq === "MENSUAL"}
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 focus:outline-none focus:border-amber-500/50 transition-colors font-mono disabled:cursor-not-allowed disabled:opacity-60"
                           />
                         </div>
 
@@ -2255,8 +2386,13 @@ export default function FinanzasPage() {
                           <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Tipo de Cobro / Frecuencia</label>
                           <select 
                             value={iFreq} 
-                            onChange={(e) => setIFreq(e.target.value as Frequency)} 
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                            onChange={(e) => {
+                              const frequency = e.target.value as Frequency;
+                              setIFreq(frequency);
+                              if (frequency === "MENSUAL") setIDate(dateInMexicoCity());
+                            }}
+                            disabled={Boolean(editingId)}
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="UNICO" className="bg-zinc-900">Pago Único (Venta Directa)</option>
                             <option value="MENSUAL" className="bg-zinc-900">Recurrente Mensual (Suscripción)</option>
@@ -2285,8 +2421,9 @@ export default function FinanzasPage() {
                         <input 
                           value={iSource} 
                           onChange={(e) => setISource(e.target.value)} 
+                          disabled={editingMonthlyIncome}
                           placeholder="Ej: Sueldo, Proyecto UX" 
-                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                          className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </div>
 
@@ -2295,8 +2432,13 @@ export default function FinanzasPage() {
                           <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Frecuencia de Cobro</label>
                           <select 
                             value={iFreq} 
-                            onChange={(e) => setIFreq(e.target.value as Frequency)} 
-                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium"
+                            onChange={(e) => {
+                              const frequency = e.target.value as Frequency;
+                              setIFreq(frequency);
+                              if (frequency === "MENSUAL") setIDate(dateInMexicoCity());
+                            }}
+                            disabled={Boolean(editingId)}
+                            className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-200 focus:outline-none focus:border-amber-500/50 appearance-none font-medium disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {(["MENSUAL", "QUINCENAL", "SEMANAL", "ANUAL"] as Frequency[]).map((f) => (
                               <option key={f} value={f} className="bg-zinc-900">{f.toLowerCase()}</option>
@@ -2327,9 +2469,10 @@ export default function FinanzasPage() {
                               <button
                                 key={t}
                                 type="button"
+                                disabled={editingMonthlyIncome}
                                 onClick={() => setIType(t)}
                                 className={cn(
-                                  "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95",
+                                  "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
                                   isSelected 
                                     ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
                                     : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"

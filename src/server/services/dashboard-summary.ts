@@ -2,12 +2,16 @@ import { getAll, getAllFinance } from "@/lib/repositories/firestore";
 import type {
   Debt,
   Expense,
+  FinancialContext,
   Goal,
   Income,
   Mission,
   TimeBlock,
 } from "@/lib/types";
-import { resolveExpensesForMonth } from "@/lib/finance/business-metrics";
+import {
+  resolveExpensesForMonth,
+  resolveIncomesForMonth,
+} from "@/lib/finance/business-metrics";
 
 function average(values: number[]) {
   if (values.length === 0) return 0;
@@ -73,7 +77,13 @@ export function currentMonthInMexicoCity() {
   return `${year}-${month}`;
 }
 
-export async function getDashboardSummary(userId: string, month: string) {
+type DashboardFinancialContext = FinancialContext | "ALL";
+
+export async function getDashboardSummary(
+  userId: string,
+  month: string,
+  financialContext: DashboardFinancialContext = "ALL",
+) {
   const [goals, missions, timeBlocks, incomes, expenses, debts] =
     await Promise.all([
       getAll<Goal>(userId, "goals"),
@@ -98,10 +108,16 @@ export async function getDashboardSummary(userId: string, month: string) {
     return goal.progress < 30 && daysLeft < 30;
   });
 
-  const monthlyIncome = incomes.filter(
-    (income) => income.month === month || income.date?.startsWith(month),
+  const monthlyIncome = resolveIncomesForMonth(
+    incomes,
+    month,
+    financialContext === "ALL" ? undefined : financialContext,
   );
-  const monthlyExpenses = resolveExpensesForMonth(expenses, month);
+  const monthlyExpenses = resolveExpensesForMonth(expenses, month).filter(
+    (expense) =>
+      financialContext === "ALL" ||
+      (expense.financialContext || "PERSONAL") === financialContext,
+  );
   const incomeTotal = monthlyIncome.reduce(
     (sum, income) => sum + income.netIncome,
     0,
@@ -110,9 +126,16 @@ export async function getDashboardSummary(userId: string, month: string) {
     (sum, expense) => sum + Math.max(0, expense.amount || 0),
     0,
   );
-  const minimumDebtPayments = debts
-    .filter((debt) => debt.status === "ACTIVE")
-    .reduce((sum, debt) => sum + debt.minimumPayment, 0);
+  const activeDebts =
+    financialContext === "PERSONAL"
+      ? debts.filter((debt) => debt.status === "ACTIVE")
+      : financialContext === "ALL"
+        ? debts.filter((debt) => debt.status === "ACTIVE")
+        : [];
+  const minimumDebtPayments =
+    month === currentMonthInMexicoCity()
+      ? activeDebts.reduce((sum, debt) => sum + debt.minimumPayment, 0)
+      : 0;
 
   const todayBlocks = timeBlocks.filter(
     (block) =>
@@ -147,13 +170,15 @@ export async function getDashboardSummary(userId: string, month: string) {
       ).length,
     },
     finance: {
+      financialContext,
       income: incomeTotal,
       expenses: expenseTotal,
       minimumDebtPayments,
       net: incomeTotal - expenseTotal - minimumDebtPayments,
-      activeDebt: debts
-        .filter((debt) => debt.status === "ACTIVE")
-        .reduce((sum, debt) => sum + debt.currentBalance, 0),
+      activeDebt: activeDebts.reduce(
+        (sum, debt) => sum + debt.currentBalance,
+        0,
+      ),
       records: {
         income: monthlyIncome.length,
         expenses: monthlyExpenses.length,

@@ -49,6 +49,7 @@ import { formatPercent, getStatusColor, formatCurrency } from "@/lib/utils";
 import {
   addMonthsToMonthKey,
   resolveExpensesForMonth,
+  resolveIncomesForMonth,
 } from "@/lib/finance/business-metrics";
 import { monthInMexicoCity } from "@/lib/time/month";
 import {
@@ -309,11 +310,14 @@ export default function DashboardPage() {
     .reduce((sum, d) => sum + d.minimumPayment, 0);
 
   const monthlyIncomesList = currentMonth >= "2026-03"
-    ? incomes.filter((income) => income.month === currentMonth)
+    ? resolveIncomesForMonth(incomes, currentMonth, "PERSONAL")
     : [];
 
   const monthlyExpensesList = currentMonth >= "2026-03"
-    ? resolveExpensesForMonth(expenses, currentMonth)
+    ? resolveExpensesForMonth(expenses, currentMonth).filter(
+        (expense) =>
+          (expense.financialContext || "PERSONAL") === "PERSONAL",
+      )
     : [];
 
   const totalIncome = monthlyIncomesList.reduce((s, i) => s + i.netIncome, 0);
@@ -330,10 +334,13 @@ export default function DashboardPage() {
   ).filter((month) => month >= "2026-03");
 
   const chartData = months.map(m => {
-    const incSum = incomes
-      .filter((income) => income.month === m)
+    const incSum = resolveIncomesForMonth(incomes, m, "PERSONAL")
       .reduce((sum, income) => sum + income.netIncome, 0);
     const expSum = resolveExpensesForMonth(expenses, m)
+      .filter(
+        (expense) =>
+          (expense.financialContext || "PERSONAL") === "PERSONAL",
+      )
       .reduce((sum, expense) => sum + Math.max(0, expense.amount || 0), 0) +
       (m === currentMonth ? totalMinPayment : 0);
     

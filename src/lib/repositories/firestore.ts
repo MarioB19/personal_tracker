@@ -20,11 +20,14 @@ import {
   findActiveExpenseIdentityConflict,
 } from "@/lib/finance/expense-series";
 import {
+  canonicalRecurringIncomeIdentity,
+  decideRecurringIncomeWrite,
+  nextRecurringIncomeRevision,
   normalizeConcept,
   recurringFixedSeriesId,
   resolveRecurringFixedExpenses,
 } from "@/lib/finance/business-metrics";
-import type { Expense, InfoproductFixedExpense } from "@/lib/types";
+import type { Expense, Income, InfoproductFixedExpense } from "@/lib/types";
 
 /**
  * Filter out undefined values to avoid Firestore "Unsupported field value: undefined" errors.
@@ -188,7 +191,7 @@ export async function createFinance<T extends DocumentData>(
 
 export class FinanceRecurrenceConflictError extends Error {
   constructor() {
-    super("El gasto recurrente cambió mientras estaba abierto");
+    super("El registro recurrente cambió mientras estaba abierto");
     this.name = "FinanceRecurrenceConflictError";
   }
 }
@@ -219,6 +222,148 @@ function storedExpenseIdentity(value: unknown): string | undefined {
     externalRef:
       typeof record.externalRef === "string" ? record.externalRef : undefined,
   });
+}
+
+function storedIncomeIdentity(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const state = value as Record<string, unknown>;
+  if (
+    typeof state.identity === "string" &&
+    state.identity.trim()
+  ) {
+    return state.identity.trim();
+  }
+  if (
+    typeof state.canonicalIdentity === "string" &&
+    state.canonicalIdentity.trim()
+  ) {
+    return state.canonicalIdentity.trim();
+  }
+
+  if (!state.latestIncome || typeof state.latestIncome !== "object") {
+    return undefined;
+  }
+  const latest = state.latestIncome as Record<string, unknown>;
+  return canonicalRecurringIncomeIdentity({
+    source: typeof latest.source === "string" ? latest.source : undefined,
+    type:
+      typeof latest.type === "string"
+        ? (latest.type as Income["type"])
+        : undefined,
+    financialContext:
+      latest.financialContext === "BUSINESS" ? "BUSINESS" : "PERSONAL",
+    productId:
+      typeof latest.productId === "string" ? latest.productId : undefined,
+    productName:
+      typeof latest.productName === "string" ? latest.productName : undefined,
+  });
+}
+
+/**
+ * Appends an immutable monthly-income version. Revisions advance exactly one
+ * step inside the transaction, so concurrent tabs cannot overwrite history or
+ * create two accepted successors for the same series state.
+ */
+export async function createRecurringIncomeVersion(
+  userId: string,
+  data: Record<string, unknown> & {
+    source: string;
+    type: Income["type"];
+    frequency: "MENSUAL";
+    financialContext?: Income["financialContext"];
+    productId?: string;
+    productName?: string;
+    seriesId: string;
+    effectiveFrom: string;
+    month: string;
+    date: string;
+    recurrenceStatus: "ACTIVE" | "CANCELLED";
+  },
+  expectedRevision: number | null,
+  currentMonth: string,
+): Promise<string> {
+  if (
+    data.frequency !== "MENSUAL" ||
+    data.effectiveFrom !== currentMonth ||
+    data.month !== currentMonth ||
+    !data.date.startsWith(`${currentMonth}-`) ||
+    !data.source.trim() ||
+    !data.seriesId.trim()
+  ) {
+    throw new FinanceRecurrenceConflictError();
+  }
+
+  const canonicalIdentity = canonicalRecurringIncomeIdentity(data);
+  const stateId = await seriesStateDocumentId(data.seriesId);
+  const seriesRef = financeDoc(userId, "incomeSeries", stateId);
+  const incomeRef = doc(financeCollection(userId, "income"));
+  const sanitized = sanitizeData(data);
+
+  await runTransaction(db, async (transaction) => {
+    const stateSnapshot = await transaction.get(seriesRef);
+    const stateData = stateSnapshot.exists() ? stateSnapshot.data() : undefined;
+    const decision = decideRecurringIncomeWrite(
+      stateSnapshot.exists()
+        ? { revision: stateData?.revision, status: stateData?.status }
+        : null,
+      expectedRevision,
+      data.recurrenceStatus,
+    );
+    if (!decision) {
+      throw new FinanceRecurrenceConflictError();
+    }
+    if (
+      decision.mode === "CREATE" &&
+      data.seriesId !== canonicalIdentity
+    ) {
+      throw new FinanceRecurrenceConflictError();
+    }
+
+    if (stateSnapshot.exists()) {
+      const storedSeriesId = stateData?.seriesId;
+      const storedIdentity = storedIncomeIdentity(stateData);
+      if (
+        (typeof storedSeriesId === "string" &&
+          storedSeriesId !== data.seriesId) ||
+        !storedIdentity ||
+        storedIdentity !== canonicalIdentity
+      ) {
+        throw new FinanceRecurrenceConflictError();
+      }
+    }
+
+    const latestEffectiveFrom = stateSnapshot.exists()
+      ? String(stateData?.effectiveFrom || "")
+      : "";
+    if (latestEffectiveFrom && data.effectiveFrom < latestEffectiveFrom) {
+      throw new FinanceRecurrenceConflictError();
+    }
+
+    const now = Timestamp.now();
+    const revision = nextRecurringIncomeRevision(decision.previousRevision);
+    const income = sanitizeData({
+      ...sanitized,
+      revision,
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    transaction.set(incomeRef, income);
+    transaction.set(seriesRef, {
+      seriesId: data.seriesId,
+      identity: canonicalIdentity,
+      revision,
+      status: data.recurrenceStatus,
+      effectiveFrom: data.effectiveFrom,
+      latestIncomeId: incomeRef.id,
+      latestIncome: { id: incomeRef.id, ...income },
+      updatedBy: userId,
+      updatedAt: now,
+    });
+  });
+
+  return incomeRef.id;
 }
 
 /**

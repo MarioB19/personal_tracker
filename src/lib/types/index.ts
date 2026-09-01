@@ -225,6 +225,10 @@ export interface Income {
   costPerHour: number;
   month: string;
   date?: string; // YYYY-MM-DD
+  effectiveFrom?: string; // Vigencia mensual de una versión recurrente
+  seriesId?: string; // Une versiones de la misma fuente mensual
+  recurrenceStatus?: "ACTIVE" | "CANCELLED";
+  revision?: number;
   financialContext?: FinancialContext;
   productId?: string;
   productName?: string;
