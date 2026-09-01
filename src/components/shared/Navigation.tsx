@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   Target,
   Trophy,
-  ListChecks,
   Wallet,
   Calendar,
   Swords,
@@ -16,6 +15,8 @@ import {
   X,
   Map,
   PiggyBank,
+  LogOut,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -87,6 +88,18 @@ function SidebarContent({
   onNavClick?: () => void;
   mobile?: boolean;
 }) {
+  const [signingOut, setSigningOut] = useState(false);
+
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.assign("/login");
+    }
+  };
+
   return (
     <>
       {/* Header / Logo */}
@@ -164,12 +177,27 @@ function SidebarContent({
               <span className="text-[13px] font-bold text-amber-400">B</span>
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-zinc-200">
                 Brandon
               </p>
               <p className="truncate text-[11px] text-zinc-500">Personal</p>
             </div>
+
+            <button
+              type="button"
+              onClick={signOut}
+              disabled={signingOut}
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-black/20 text-zinc-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-wait disabled:opacity-50"
+            >
+              {signingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+            </button>
           </div>
         </div>
       </div>

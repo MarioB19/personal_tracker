@@ -25,10 +25,10 @@ import {
   CalendarCheck,
   Search,
   Clock,
-  Filter,
   Edit2
 } from "lucide-react";
 import { cn, normalizeActivityName } from "@/lib/utils";
+import madrizRoutine from "@/data/routines/madriz-v2.json";
 
 const DAYS: { key: DayOfWeek; label: string; short: string }[] = [
   { key: "MON", label: "Lunes", short: "Lun" },
@@ -138,6 +138,9 @@ interface TemplateSlot {
   endTime: string;
   title: string;
   category: BlockCategory;
+  activityId?: string;
+  projectTag?: string;
+  notes?: string;
 }
 
 export default function AgendaPage() {
@@ -772,108 +775,21 @@ export default function AgendaPage() {
   };
 
   const handleLoadRoutine = async () => {
-    const baseBlocks: { day: DayOfWeek; startTime: string; endTime: string; title: string; category: BlockCategory }[] = [];
-
-    // Lunes
-    baseBlocks.push(
-      { day: "MON", startTime: "00:00", endTime: "07:00", title: "Dormir", category: "SALUD" },
-      { day: "MON", startTime: "07:00", endTime: "08:00", title: "Acomodar + Leer", category: "PERSONAL" },
-      { day: "MON", startTime: "08:00", endTime: "16:00", title: "Astra", category: "TRABAJO" },
-      { day: "MON", startTime: "16:00", endTime: "18:00", title: "Gym", category: "SALUD" },
-      { day: "MON", startTime: "18:00", endTime: "19:00", title: "Descanso", category: "OCIO" },
-      { day: "MON", startTime: "19:00", endTime: "20:00", title: "Daskalos", category: "TRABAJO" },
-      { day: "MON", startTime: "20:00", endTime: "23:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-      { day: "MON", startTime: "23:00", endTime: "23:15", title: "Journaling", category: "PERSONAL" },
-      { day: "MON", startTime: "23:15", endTime: "23:30", title: "Leer", category: "APRENDIZAJE" },
-      { day: "MON", startTime: "23:30", endTime: "24:00", title: "Dormir", category: "SALUD" }
-    );
-
-    // Martes y Miércoles
-    ["TUE", "WED"].forEach(day => {
-      baseBlocks.push(
-        { day: day as DayOfWeek, startTime: "00:00", endTime: "05:45", title: "Dormir", category: "SALUD" },
-        { day: day as DayOfWeek, startTime: "05:45", endTime: "06:00", title: "Acomodar + Leer", category: "PERSONAL" },
-        { day: day as DayOfWeek, startTime: "06:00", endTime: "07:00", title: "Daskalos + Red", category: "TRABAJO" },
-        { day: day as DayOfWeek, startTime: "07:00", endTime: "08:00", title: "Running", category: "SALUD" },
-        { day: day as DayOfWeek, startTime: "08:00", endTime: "17:00", title: "Astra", category: "TRABAJO" },
-        { day: day as DayOfWeek, startTime: "17:00", endTime: "18:00", title: "Running", category: "SALUD" },
-        { day: day as DayOfWeek, startTime: "18:00", endTime: "20:00", title: "Daskalos + Red", category: "TRABAJO" },
-        { day: day as DayOfWeek, startTime: "20:00", endTime: "23:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-        { day: day as DayOfWeek, startTime: "23:00", endTime: "23:15", title: "Journaling", category: "PERSONAL" },
-        { day: day as DayOfWeek, startTime: "23:15", endTime: "23:30", title: "Leer", category: "APRENDIZAJE" },
-        { day: day as DayOfWeek, startTime: "23:30", endTime: "24:00", title: "Dormir", category: "SALUD" }
-      );
-    });
-
-    // Jueves
-    baseBlocks.push(
-      { day: "THU", startTime: "00:00", endTime: "05:45", title: "Dormir", category: "SALUD" },
-      { day: "THU", startTime: "05:45", endTime: "06:00", title: "Acomodar + Leer", category: "PERSONAL" },
-      { day: "THU", startTime: "06:00", endTime: "08:00", title: "Gym", category: "SALUD" },
-      { day: "THU", startTime: "08:00", endTime: "17:00", title: "Astra", category: "TRABAJO" },
-      { day: "THU", startTime: "17:00", endTime: "18:00", title: "Descansar", category: "OCIO" },
-      { day: "THU", startTime: "18:00", endTime: "20:00", title: "Daskalos + Red", category: "TRABAJO" },
-      { day: "THU", startTime: "20:00", endTime: "23:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-      { day: "THU", startTime: "23:00", endTime: "23:15", title: "Journaling", category: "PERSONAL" },
-      { day: "THU", startTime: "23:15", endTime: "23:30", title: "Leer", category: "APRENDIZAJE" },
-      { day: "THU", startTime: "23:30", endTime: "24:00", title: "Dormir", category: "SALUD" }
-    );
-
-    // Viernes
-    baseBlocks.push(
-      { day: "FRI", startTime: "00:00", endTime: "07:00", title: "Dormir", category: "SALUD" },
-      { day: "FRI", startTime: "07:00", endTime: "08:00", title: "Daskalos + Red", category: "TRABAJO" },
-      { day: "FRI", startTime: "08:00", endTime: "10:00", title: "Gym", category: "SALUD" },
-      { day: "FRI", startTime: "10:00", endTime: "16:00", title: "Astra", category: "TRABAJO" },
-      { day: "FRI", startTime: "16:00", endTime: "19:00", title: "Descansar", category: "OCIO" },
-      { day: "FRI", startTime: "19:00", endTime: "20:00", title: "Running", category: "SALUD" },
-      { day: "FRI", startTime: "20:00", endTime: "23:00", title: "Descansar + Journaling + Leer", category: "PERSONAL" },
-      { day: "FRI", startTime: "23:00", endTime: "24:00", title: "Dormir", category: "SALUD" }
-    );
-
-    // Sábado
-    baseBlocks.push(
-      { day: "SAT", startTime: "00:00", endTime: "07:00", title: "Dormir", category: "SALUD" },
-      { day: "SAT", startTime: "07:00", endTime: "08:00", title: "Daskalos", category: "TRABAJO" },
-      { day: "SAT", startTime: "08:00", endTime: "10:00", title: "Gym", category: "SALUD" },
-      { day: "SAT", startTime: "10:00", endTime: "13:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-      { day: "SAT", startTime: "13:00", endTime: "14:00", title: "Tarea", category: "APRENDIZAJE" },
-      { day: "SAT", startTime: "14:00", endTime: "15:00", title: "Descanso", category: "OCIO" },
-      { day: "SAT", startTime: "15:00", endTime: "16:00", title: "Red", category: "TRABAJO" },
-      { day: "SAT", startTime: "16:00", endTime: "17:00", title: "Descanso", category: "OCIO" },
-      { day: "SAT", startTime: "17:00", endTime: "18:00", title: "Aprendizaje técnico", category: "APRENDIZAJE" },
-      { day: "SAT", startTime: "18:00", endTime: "20:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-      { day: "SAT", startTime: "20:00", endTime: "22:00", title: "Descanso", category: "OCIO" },
-      { day: "SAT", startTime: "22:00", endTime: "22:15", title: "Journaling", category: "PERSONAL" },
-      { day: "SAT", startTime: "22:15", endTime: "22:30", title: "Leer", category: "APRENDIZAJE" },
-      { day: "SAT", startTime: "22:30", endTime: "24:00", title: "Dormir", category: "SALUD" }
-    );
-
-    // Domingo
-    baseBlocks.push(
-      { day: "SUN", startTime: "00:00", endTime: "06:00", title: "Dormir", category: "SALUD" },
-      { day: "SUN", startTime: "06:00", endTime: "07:00", title: "Acomodar + Leer", category: "PERSONAL" },
-      { day: "SUN", startTime: "07:00", endTime: "09:00", title: "Correr", category: "SALUD" },
-      { day: "SUN", startTime: "09:00", endTime: "13:00", title: "Dormir", category: "SALUD" },
-      { day: "SUN", startTime: "13:00", endTime: "14:00", title: "Inglés", category: "APRENDIZAJE" },
-      { day: "SUN", startTime: "14:00", endTime: "15:00", title: "Descansar", category: "OCIO" },
-      { day: "SUN", startTime: "15:00", endTime: "20:00", title: "Deep Work (Emprender)", category: "TRABAJO" },
-      { day: "SUN", startTime: "20:00", endTime: "20:30", title: "Descansar", category: "OCIO" },
-      { day: "SUN", startTime: "20:30", endTime: "21:30", title: "Misa", category: "PERSONAL" },
-      { day: "SUN", startTime: "21:30", endTime: "21:45", title: "Journaling", category: "PERSONAL" },
-      { day: "SUN", startTime: "21:45", endTime: "22:00", title: "Leer", category: "APRENDIZAJE" },
-      { day: "SUN", startTime: "22:00", endTime: "24:00", title: "Dormir", category: "SALUD" }
+    const baseBlocks: TemplateSlot[] = madrizRoutine.recurrent.map(
+      ([id, day, startTime, endTime, title, category, projectTag]) => ({
+        id,
+        day: day as DayOfWeek,
+        startTime,
+        endTime,
+        title,
+        category: category as BlockCategory,
+        projectTag,
+        notes: "",
+      })
     );
 
     if (view === "template") {
-      const slots = baseBlocks.map(b => ({
-        day: b.day,
-        startTime: b.startTime,
-        endTime: b.endTime,
-        title: b.title,
-        category: b.category,
-      }));
-      setTemplate(slots.sort((a, b) => a.startTime.localeCompare(b.startTime)));
+      setTemplate(baseBlocks);
       alert("¡Rutina Maestra cargada localmente en tu diseñador de plantilla ideal! Haz clic en 'Guardar Plantilla' para guardarla permanentemente.");
       return;
     }
@@ -897,15 +813,18 @@ export default function AgendaPage() {
     await Promise.all(
       baseBlocks.map(b => create(uid, "timeBlocks", {
         weekId,
+        templateSlotId: b.id,
         day: b.day,
         startTime: b.startTime,
         endTime: b.endTime,
         title: b.title,
+        activityId: b.activityId,
+        projectTag: b.projectTag,
         category: b.category,
         plannedStatus: "PLANNED",
         executedStatus: "PLANNED",
         complianceRate: 0,
-        notes: "",
+        notes: b.notes ?? "",
       }))
     );
     await loadData();
@@ -2113,7 +2032,7 @@ export default function AgendaPage() {
               <input
                 value={statsSearchQuery}
                 onChange={(e) => setStatsSearchQuery(e.target.value)}
-                placeholder="Buscar actividad... (ej: Daskalos, Red, Deep Work)"
+                placeholder="Buscar actividad... (ej: Madriz, Daskalos, Astra)"
                 className="w-full pl-10 pr-4 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
               />
               {statsSearchQuery && (

@@ -1,17 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/hooks/useAuth";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
 export const metadata: Metadata = {
-  title: "Life Tracker — Tu sistema de tracking integral",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  ),
+  title: "LifeTracker · Personal OS",
   description:
     "Plataforma personal para tracking de vida, finanzas, tiempo y objetivos.",
+  openGraph: {
+    title: "LifeTracker · Personal OS",
+    description: "Finanzas, objetivos, agenda y operación de negocio en un solo lugar.",
+    images: [{ url: "/og.png", width: 1672, height: 941 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "LifeTracker · Personal OS",
+    description: "Finanzas, objetivos, agenda y operación de negocio en un solo lugar.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({
@@ -21,7 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className="dark">
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

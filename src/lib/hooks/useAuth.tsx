@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 interface AuthContextType {
-  user: any;
+  user: { uid: string; name: string } | null;
   loading: boolean;
   authenticated: boolean;
   signInWithCode: (code: string) => Promise<boolean>;
@@ -12,29 +12,49 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const ACCESS_CODE = process.env.NEXT_PUBLIC_ACCESS_CODE || "1234";
-const AUTH_KEY = "lt_authenticated";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Single user system: check local storage for passcode clearance
-    const isAuth = typeof window !== "undefined" && localStorage.getItem(AUTH_KEY) === "true";
-    setAuthenticated(isAuth);
-    setLoading(false);
+    const controller = new AbortController();
+    void fetch("/api/auth/session", {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) return false;
+        const body = (await response.json()) as { authenticated?: boolean };
+        return body.authenticated === true;
+      })
+      .then(setAuthenticated)
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setAuthenticated(false);
+        }
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
   }, []);
 
   const signInWithCode = async (code: string): Promise<boolean> => {
-    if (code !== ACCESS_CODE) return false;
-    localStorage.setItem(AUTH_KEY, "true");
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) return false;
     setAuthenticated(true);
     return true;
   };
 
   const signOut = async () => {
-    localStorage.removeItem(AUTH_KEY);
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
     setAuthenticated(false);
   };
 

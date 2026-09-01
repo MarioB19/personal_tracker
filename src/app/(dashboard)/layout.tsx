@@ -1,34 +1,14 @@
-"use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/hooks/useAuth";
 import Navigation from "@/components/shared/Navigation";
-import { Loader2 } from "lucide-react";
+import { requireWebSession } from "@/server/auth/web-session";
 
-export default function DashboardLayout({
+export const dynamic = "force-dynamic";
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { authenticated, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !authenticated) {
-      router.replace("/login");
-    }
-  }, [authenticated, loading, router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!authenticated) return null;
+  await requireWebSession("/dashboard");
 
   return (
     <div className="min-h-screen bg-[#050505] text-white overflow-x-hidden">

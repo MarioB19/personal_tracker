@@ -20,7 +20,14 @@ export default function LoginPage() {
     try {
       const success = await signInWithCode(code);
       if (success) {
-        router.push("/");
+        const requestedPath = new URLSearchParams(window.location.search).get(
+          "returnTo",
+        );
+        const returnTo =
+          requestedPath?.startsWith("/") && !requestedPath.startsWith("//")
+            ? requestedPath
+            : "/";
+        router.push(returnTo);
       } else {
         setError("Código incorrecto");
         setCode("");
@@ -62,7 +69,7 @@ export default function LoginPage() {
                 placeholder="• • • •"
                 autoFocus
                 required
-                maxLength={10}
+                maxLength={128}
                 className="input text-center tracking-[0.75em] font-mono text-xl py-4 !bg-black/40 rounded-xl"
               />
             </div>

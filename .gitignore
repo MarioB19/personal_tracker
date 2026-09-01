@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+/.local-backups/
 
 # debug
 npm-debug.log*
@@ -39,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# keep a safe, shareable environment template
+!.env.example

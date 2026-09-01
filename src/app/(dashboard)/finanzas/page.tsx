@@ -66,6 +66,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { dateInMexicoCity, monthInMexicoCity } from "@/lib/time/month";
 import InfoproductHealthCheck from "@/components/finanzas/InfoproductHealthCheck";
 
 type TabType = "health-check" | "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
@@ -317,7 +318,7 @@ export default function FinanzasPage() {
   const [mTarget, setMTarget] = useState("");
   const [mCurrent, setMCurrent] = useState("");
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = monthInMexicoCity();
 
   // Sincronizar transición lateral de SlideOver
   useEffect(() => {
@@ -439,12 +440,12 @@ export default function FinanzasPage() {
 
   const monthlyIncomesList = incomes.filter((inc) => {
     const ctx = inc.financialContext || "PERSONAL";
-    return ctx === financialContext;
+    return ctx === financialContext && inc.month === currentMonth;
   });
 
   const monthlyExpensesList = expenses.filter((exp) => {
     const ctx = exp.financialContext || "PERSONAL";
-    return ctx === financialContext;
+    return ctx === financialContext && exp.month === currentMonth;
   });
 
   // Business Specific Calculations
@@ -456,9 +457,24 @@ export default function FinanzasPage() {
     .filter((e) => e.type === "SUSCRIPCION" && (e.subscriptionStatus || "active") !== "cancelled")
     .reduce((s, e) => s + e.amount, 0);
 
-  const totalInfoproductRevenue = infoproductOps.reduce((s, o) => s + (o.revenue || 0), 0);
-  const totalInfoproductAdSpend = infoproductOps.reduce((s, o) => s + (o.adSpend || 0), 0);
-  const totalInfoproductFixed = infoproductFixedExpenses.reduce((s, f) => s + (f.amount || 0), 0);
+  const currentInfoproductOps = infoproductOps.filter(
+    (operation) => operation.month === currentMonth,
+  );
+  const currentInfoproductFixedExpenses = infoproductFixedExpenses.filter(
+    (expense) => expense.month === currentMonth,
+  );
+  const totalInfoproductRevenue = currentInfoproductOps.reduce(
+    (sum, operation) => sum + (operation.revenue || 0),
+    0,
+  );
+  const totalInfoproductAdSpend = currentInfoproductOps.reduce(
+    (sum, operation) => sum + (operation.adSpend || 0),
+    0,
+  );
+  const totalInfoproductFixed = currentInfoproductFixedExpenses.reduce(
+    (sum, expense) => sum + (expense.amount || 0),
+    0,
+  );
 
   const totalIncome =
     financialContext === "BUSINESS"
@@ -562,7 +578,7 @@ export default function FinanzasPage() {
     setPName("");
     setPDescription("");
     setPStatus("testing");
-    setPDate(new Date().toISOString().split("T")[0]);
+    setPDate(dateInMexicoCity());
     setModal("product");
   };
 
@@ -571,7 +587,7 @@ export default function FinanzasPage() {
     setPName(p.name);
     setPDescription(p.description || "");
     setPStatus(p.status || "testing");
-    setPDate(p.createdDate || (p.createdAt?.toDate ? p.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0]));
+    setPDate(p.createdDate || (p.createdAt?.toDate ? dateInMexicoCity(p.createdAt.toDate()) : dateInMexicoCity()));
     setModal("product");
   };
 
@@ -581,7 +597,7 @@ export default function FinanzasPage() {
       name: pName.trim(),
       description: pDescription.trim(),
       status: pStatus,
-      createdDate: pDate || new Date().toISOString().split("T")[0],
+      createdDate: pDate || dateInMexicoCity(),
     };
     if (editingId) {
       await updateFinance(uid, "products", editingId, payload);
@@ -608,7 +624,7 @@ export default function FinanzasPage() {
     setIHours("0");
     setIProductId(p.id);
     setIProductName(p.name);
-    setIDate(new Date().toISOString().split("T")[0]);
+    setIDate(dateInMexicoCity());
     setModal("income");
   };
 
@@ -622,7 +638,7 @@ export default function FinanzasPage() {
     setEProductId(p.id);
     setEProductName(p.name);
     setESubscriptionStatus("active");
-    setEDate(new Date().toISOString().split("T")[0]);
+    setEDate(dateInMexicoCity());
     setModal("expense");
   };
 
@@ -636,7 +652,7 @@ export default function FinanzasPage() {
     setIHours("160");
     setIProductId("");
     setIProductName("");
-    setIDate(new Date().toISOString().split("T")[0]);
+    setIDate(dateInMexicoCity());
     setModal("income");
   };
 
@@ -650,7 +666,7 @@ export default function FinanzasPage() {
     setIHours(i.hoursPerMonth?.toString() || "160");
     setIProductId(i.productId || "");
     setIProductName(i.productName || "");
-    setIDate(i.date || (i.createdAt?.toDate ? i.createdAt.toDate().toISOString().split("T")[0] : `${i.month}-01`));
+    setIDate(i.date || (i.createdAt?.toDate ? dateInMexicoCity(i.createdAt.toDate()) : `${i.month}-01`));
     setModal("income");
   };
 
@@ -664,7 +680,7 @@ export default function FinanzasPage() {
     setEProductId(e.productId || "");
     setEProductName(e.productName || "");
     setESubscriptionStatus(e.subscriptionStatus || "active");
-    setEDate(e.date || (e.createdAt?.toDate ? e.createdAt.toDate().toISOString().split("T")[0] : `${e.month}-01`));
+    setEDate(e.date || (e.createdAt?.toDate ? dateInMexicoCity(e.createdAt.toDate()) : `${e.month}-01`));
     setModal("expense");
   };
 
@@ -708,7 +724,7 @@ export default function FinanzasPage() {
 
     const selectedProd = products.find((p) => p.id === iProductId);
     const finalProdName = selectedProd ? selectedProd.name : iProductName.trim();
-    const finalDate = iDate || new Date().toISOString().split("T")[0];
+    const finalDate = iDate || dateInMexicoCity();
 
     const payload = {
       source: iSource.trim(),
@@ -742,7 +758,7 @@ export default function FinanzasPage() {
     setIHours("160");
     setIProductId("");
     setIProductName("");
-    setIDate(new Date().toISOString().split("T")[0]);
+    setIDate(dateInMexicoCity());
   };
 
   const saveExpense = async () => {
@@ -752,7 +768,7 @@ export default function FinanzasPage() {
 
     const selectedProd = products.find((p) => p.id === eProductId);
     const finalProdName = selectedProd ? selectedProd.name : eProductName.trim();
-    const finalDate = eDate || new Date().toISOString().split("T")[0];
+    const finalDate = eDate || dateInMexicoCity();
 
     const payload = {
       name: eName,
@@ -778,7 +794,7 @@ export default function FinanzasPage() {
   };
 
   const resetExpenseForm = () => {
-    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductId(""); setEProductName(""); setESubscriptionStatus("active"); setEDate(new Date().toISOString().split("T")[0]);
+    setEName(""); setECat("COMIDA"); setEAmount(""); setEType("VARIABLE"); setEChargeDay(""); setEProductId(""); setEProductName(""); setESubscriptionStatus("active"); setEDate(dateInMexicoCity());
   };
 
   const saveDebt = async () => {
@@ -919,6 +935,27 @@ export default function FinanzasPage() {
           { key: "ahorros", label: "Ahorros", icon: PiggyBank },
         ];
 
+  const tabNavigation = (
+    <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={() => setActiveTab(tab.key)}
+          className={cn(
+            "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200",
+            activeTab === tab.key
+              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.06)]"
+              : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
+          )}
+        >
+          <tab.icon className="w-3.5 h-3.5 shrink-0" />
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-8 page-enter pb-10">
       
@@ -932,7 +969,11 @@ export default function FinanzasPage() {
             Control Financiero {financialContext === "BUSINESS" ? "— Negocio" : "— Personal"}
           </h1>
           <p className="text-xs text-zinc-500 mt-1 capitalize">
-            {new Date().toLocaleDateString("es-MX", { month: "long", year: "numeric" })}
+            {new Date().toLocaleDateString("es-MX", {
+              month: "long",
+              year: "numeric",
+              timeZone: "America/Mexico_City",
+            })}
           </p>
         </div>
 
@@ -980,24 +1021,29 @@ export default function FinanzasPage() {
 
       {/* ── Visual Context Content ────────────────── */}
       {financialContext === "BUSINESS" ? (
-        <InfoproductHealthCheck
-          userId={uid || ""}
-          ops={infoproductOps}
-          fixedExpenses={infoproductFixedExpenses}
-          initialBusinessCapital={initialBusinessCapital}
-          productTestCost={productTestCost}
-          onSaveBusinessConfig={async (cap, tCost) => {
-            if (!uid) return;
-            setInitialBusinessCapital(cap);
-            setProductTestCost(tCost);
-            await setDoc(
-              doc(db, "users", uid, "finance", "business_config"),
-              { initialBusinessCapital: cap, productTestCost: tCost },
-              { merge: true }
-            );
-          }}
-          onRefresh={loadData}
-        />
+        <>
+          {tabNavigation}
+          {activeTab === "health-check" && (
+            <InfoproductHealthCheck
+              userId={uid || ""}
+              ops={infoproductOps}
+              fixedExpenses={infoproductFixedExpenses}
+              initialBusinessCapital={initialBusinessCapital}
+              productTestCost={productTestCost}
+              onSaveBusinessConfig={async (cap, tCost) => {
+                if (!uid) return;
+                setInitialBusinessCapital(cap);
+                setProductTestCost(tCost);
+                await setDoc(
+                  doc(db, "users", uid, "finance", "business_config"),
+                  { initialBusinessCapital: cap, productTestCost: tCost },
+                  { merge: true }
+                );
+              }}
+              onRefresh={loadData}
+            />
+          )}
+        </>
       ) : (
         <>
           {/* Stats Grid Personal */}
@@ -1041,24 +1087,7 @@ export default function FinanzasPage() {
             />
           </div>
 
-          {/* Tabs Personal */}
-          <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={cn(
-                  "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200",
-                  activeTab === tab.key
-                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.06)]"
-                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
-                )}
-              >
-                <tab.icon className="w-3.5 h-3.5 shrink-0" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {tabNavigation}
         </>
       )}
 
@@ -1128,9 +1157,9 @@ export default function FinanzasPage() {
                 <Section title="Estructura de Gastos y Amortización">
                   <div className="divide-y divide-white/[0.04]">
                     {[
-                      { label: "Gastos Fijos Planificados", value: formatCurrency(expenses.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Home },
-                      { label: "Gastos Variables Estimados", value: formatCurrency(expenses.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Zap },
-                      { label: "Suscripciones Recurrentes", value: formatCurrency(expenses.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: RefreshCw },
+                      { label: "Gastos Fijos Planificados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "FIJO").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Home },
+                      { label: "Gastos Variables Estimados", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: Zap },
+                      { label: "Suscripciones Recurrentes", value: formatCurrency(monthlyExpensesList.filter((e) => e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0)), highlight: false, icon: RefreshCw },
                       { label: "Pago Mínimo Comprometido (Deuda)", value: formatCurrency(debts.filter((d) => d.status === "ACTIVE").reduce((s, d) => s + d.minimumPayment, 0)), highlight: debts.filter((d) => d.status === "ACTIVE").length > 0, icon: CreditCard },
                     ].map((row, i) => {
                       const RowIcon = row.icon;

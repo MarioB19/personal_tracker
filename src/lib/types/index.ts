@@ -184,6 +184,16 @@ export interface InfoproductOp {
   adSpend: number;
   revenue: number;
   salesCount?: number;
+  source?: "MANUAL" | "VIBE";
+  externalRef?: string;
+  track?: "WHATSAPP" | "LANDING" | "UNCLASSIFIED";
+  spendNet?: number;
+  vatAmount?: number;
+  conversations?: number;
+  costPerConversation?: number | null;
+  cpa?: number | null;
+  roas?: number | null;
+  sourceStatus?: "PROVISIONAL" | "FINAL";
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -235,6 +245,8 @@ export interface Expense {
   productId?: string;
   productName?: string;
   subscriptionStatus?: "active" | "cancelled";
+  externalRef?: string;
+  createdBy?: string;
   notes: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
