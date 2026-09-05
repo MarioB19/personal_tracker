@@ -18,8 +18,10 @@ import { formatCurrency, formatCurrencyPrecise, cn } from "@/lib/utils";
 import { classifyBusinessHealth } from "@/lib/finance/business-health";
 import {
   addMonthsToMonthKey,
+  analyzeVibeBusinessSummaryQuality,
   calculateBusinessPosition,
   isVibeBusinessSummaryComplete,
+  isVibeBusinessSummaryUsableEstimate,
   normalizeConcept,
   recurringFixedSeriesId,
   resolveCombinedBusinessFixedExpenses,
@@ -27,6 +29,9 @@ import {
 } from "@/lib/finance/business-metrics";
 import { monthInMexicoCity } from "@/lib/time/month";
 import VibeBusinessSnapshotCard from "@/components/finanzas/VibeBusinessSnapshotCard";
+import MonthlyBusinessCloseCard, {
+  type MonthlyCloseConfidence,
+} from "@/components/finanzas/MonthlyBusinessCloseCard";
 import {
   TrendingUp,
   TrendingDown,
@@ -350,15 +355,9 @@ export default function InfoproductHealthCheck({
 
   const usingVibe = vibeMonthOps.length > 0 || Boolean(vibeSummary);
   const monthOps = usingVibe ? vibeMonthOps : manualMonthOps;
-  const selectedVibeIncomplete = Boolean(
-    vibeSummary && !isVibeBusinessSummaryComplete(vibeSummary),
-  );
-  const selectedDataIncomplete =
-    selectedMonth <= currentMonthKey &&
-    (selectedVibeIncomplete ||
-      (!usingVibe &&
-        manualMonthOps.length === 0 &&
-        (vibeLoading || Boolean(vibeError))));
+  const selectedVibeQuality = vibeSummary
+    ? analyzeVibeBusinessSummaryQuality(vibeSummary)
+    : null;
 
   const selectedFixedResolution = useMemo(
     () =>
@@ -450,28 +449,13 @@ export default function InfoproductHealthCheck({
     netResult,
     projectedClosingResult,
   });
-  const healthStatus = selectedDataIncomplete ? "ATENCION" : health.status;
+  // La salud financiera y la calidad del dato son dimensiones distintas: una
+  // pérdida sigue siendo roja aunque el corte aún sea una estimación.
+  const healthStatus = health.status;
   let healthMessage = "";
   let healthSub = "";
 
-  if (selectedDataIncomplete) {
-    if (vibeLoading) {
-      healthMessage =
-        "Estamos completando los datos del periodo antes de diagnosticarlo.";
-      healthSub =
-        "El health check se actualizará automáticamente al terminar la consulta.";
-    } else if (selectedVibeIncomplete) {
-      healthMessage =
-        "El periodo tiene datos provisionales o fuentes incompletas.";
-      healthSub =
-        "Las cifras se muestran como estimación, pero no alimentan un cierre confirmado ni el runway.";
-    } else {
-      healthMessage =
-        "No pudimos confirmar la operación de este periodo con Vibe.";
-      healthSub =
-        "Los gastos fijos siguen visibles, pero no se marcará el mes como pérdida confirmada hasta contar con Vibe o un registro manual.";
-    }
-  } else if (health.reason === "NO_OPERATION") {
+  if (health.reason === "NO_OPERATION") {
     healthMessage = totalKnownOperatingExpenses > 0
       ? "No hay operación registrada y los gastos conocidos ya están consumiendo capital."
       : "Aún no hay operación suficiente para evaluar la salud del negocio.";
@@ -501,6 +485,8 @@ export default function InfoproductHealthCheck({
         source: "VIBE" as const,
         sourceStatus: summary.status,
         sourceComplete: isVibeBusinessSummaryComplete(summary),
+        sourceUsableEstimate:
+          isVibeBusinessSummaryUsableEstimate(summary),
         loading: false,
         error: "",
       };
@@ -513,6 +499,7 @@ export default function InfoproductHealthCheck({
       source: "MANUAL" as const,
       sourceStatus: null,
       sourceComplete: manualOperations.length > 0,
+      sourceUsableEstimate: manualOperations.length > 0,
       loading: month <= currentMonthKey ? !entry || entry.loading : false,
       error: entry?.error ?? "",
     };
@@ -610,7 +597,7 @@ export default function InfoproductHealthCheck({
       currentFixedCommitment -
       currentOtherOperatingExpenses,
     hasData:
-      currentMonthBundle.sourceComplete &&
+      currentMonthBundle.sourceUsableEstimate &&
       (currentRevenue > 0 ||
         currentSpend > 0 ||
         currentFixedCommitment > 0 ||
@@ -633,11 +620,16 @@ export default function InfoproductHealthCheck({
   const globalDataErrors = [currentMonthKey, ...closedMonthKeys].filter(
     (month) => Boolean(vibeCacheRef.current.get(month)?.error),
   );
-  const globalIncompletePeriods = [currentMonthKey, ...closedMonthKeys].filter(
+  const globalIncompleteClosedPeriods = closedMonthKeys.filter(
     (month) => {
       const summary = vibeCacheRef.current.get(month)?.summary;
       return Boolean(summary && !isVibeBusinessSummaryComplete(summary));
     },
+  );
+  const currentVibeSummary = vibeCacheRef.current.get(currentMonthKey)?.summary;
+  const currentVibeEstimateUsable = Boolean(
+    currentVibeSummary &&
+      isVibeBusinessSummaryUsableEstimate(currentVibeSummary),
   );
   const businessPositionTone =
     businessPosition.status === "CRITICAL"
@@ -670,6 +662,40 @@ export default function InfoproductHealthCheck({
     totalFixedExpenses > 0
       ? Math.max(0, contributionMargin) / totalFixedExpenses
       : null;
+  const selectedQualityIssueCount = selectedVibeQuality
+    ? selectedVibeQuality.sourceIssues.length +
+      selectedVibeQuality.missingChecks.length +
+      selectedVibeQuality.duplicateChecks.length +
+      selectedVibeQuality.unexpectedChecks.length +
+      selectedVibeQuality.errorChecks.length +
+      selectedVibeQuality.dataIssues.length
+    : 0;
+  const selectedCloseConfidence: MonthlyCloseConfidence =
+    selectedVibeQuality?.complete
+      ? "CONFIRMED"
+      : isCurrentMonthSelected && selectedVibeQuality?.usableEstimate
+        ? "OPEN"
+        : vibeSummary
+          ? "INCOMPLETE"
+          : manualMonthOps.length > 0
+            ? "MANUAL"
+            : vibeLoading
+              ? "LOADING"
+              : "KNOWN_ONLY";
+  const selectedConfidenceDetail =
+    selectedCloseConfidence === "CONFIRMED"
+      ? "Vibe confirmó el mes completo y este cierre puede alimentar el cálculo del runway."
+      : selectedCloseConfidence === "OPEN"
+        ? "El mes sigue abierto. Las fuentes están completas al corte y se usan como estimación para la proyección; el cierre se confirmará al iniciar el mes siguiente."
+        : selectedCloseConfidence === "INCOMPLETE"
+          ? selectedQualityIssueCount > 0
+            ? `La cifra sigue visible como estimación, pero hay ${selectedQualityIssueCount} punto${selectedQualityIssueCount === 1 ? "" : "s"} de calidad por resolver antes de confirmar el cierre.`
+            : "La cifra sigue visible como estimación, pero Vibe todavía no ha emitido el cierre final del periodo."
+          : selectedCloseConfidence === "MANUAL"
+            ? "Vibe no está disponible para este periodo; se muestran los registros manuales como respaldo."
+            : selectedCloseConfidence === "LOADING"
+              ? "Se muestran los gastos conocidos mientras Vibe termina de actualizar las fuentes del periodo."
+              : "No hay ventas ni pauta confirmadas; el resultado refleja únicamente los gastos conocidos del periodo.";
 
   // ── ANNUAL CALCULATIONS ──
   const annualMonthsGrid = Array.from({ length: 12 }, (_, index) => {
@@ -702,11 +728,11 @@ export default function InfoproductHealthCheck({
     const net = rev - ad - fix - other;
     const margin = rev - ad;
     const isFuture = key > currentMonthKey;
+    const isCurrent = key === currentMonthKey;
     const hasOperation = rev > 0 || ad > 0 || bundle.operations.length > 0;
-    const hasData =
-      bundle.sourceComplete && (hasOperation || fix > 0 || other > 0);
+    const hasData = hasOperation || fix > 0 || other > 0;
     const incomplete =
-      !isFuture &&
+      key < currentMonthKey &&
       !bundle.sourceComplete &&
       (bundle.loading || Boolean(bundle.error) || Boolean(bundle.sourceStatus));
     const diagnosed = classifyBusinessHealth({
@@ -720,14 +746,32 @@ export default function InfoproductHealthCheck({
       | "ATENCION"
       | "MAL"
       | "EMPTY"
-      | "PLANNED"
-      | "INCOMPLETE" = isFuture
+      | "PLANNED" = isFuture
       ? "PLANNED"
-      : incomplete
-        ? "INCOMPLETE"
-        : hasData
-          ? diagnosed.status
-          : "EMPTY";
+      : hasData
+        ? diagnosed.status
+        : "EMPTY";
+    const confidence:
+      | "CONFIRMED"
+      | "OPEN"
+      | "INCOMPLETE"
+      | "MANUAL"
+      | "PLANNED"
+      | "EMPTY" = isFuture
+      ? "PLANNED"
+      : bundle.source === "MANUAL" && bundle.operations.length > 0
+        ? "MANUAL"
+        : bundle.sourceComplete
+          ? "CONFIRMED"
+          : isCurrent && bundle.sourceUsableEstimate
+            ? "OPEN"
+            : incomplete ||
+                (isCurrent &&
+                  (bundle.loading ||
+                    Boolean(bundle.error) ||
+                    Boolean(bundle.sourceStatus)))
+              ? "INCOMPLETE"
+              : "EMPTY";
     const monthShort = new Date(selectedYear, index, 1)
       .toLocaleDateString("es-MX", { month: "short" })
       .toUpperCase();
@@ -739,6 +783,7 @@ export default function InfoproductHealthCheck({
       source: bundle.source,
       sourceStatus: bundle.sourceStatus,
       sourceComplete: bundle.sourceComplete,
+      sourceUsableEstimate: bundle.sourceUsableEstimate,
       loading: bundle.loading,
       error: bundle.error,
       rev,
@@ -749,13 +794,20 @@ export default function InfoproductHealthCheck({
       margin,
       roas: ad > 0 ? rev / ad : rev > 0 ? 999 : 0,
       status,
+      confidence,
       isFuture,
     };
   });
 
   const annualYtdMonths = annualMonthsGrid.filter((month) => !month.isFuture);
   const annualIncompleteMonths = annualYtdMonths.filter(
-    (month) => month.status === "INCOMPLETE",
+    (month) => month.confidence === "INCOMPLETE" && month.key < currentMonthKey,
+  );
+  const annualCurrentIncompleteMonths = annualYtdMonths.filter(
+    (month) => month.confidence === "INCOMPLETE" && month.key === currentMonthKey,
+  );
+  const annualOpenMonths = annualYtdMonths.filter(
+    (month) => month.confidence === "OPEN",
   );
   const annualYtdOps = annualYtdMonths.flatMap((month) => month.operations);
   const annualRevenue = annualYtdMonths.reduce((sum, month) => sum + month.rev, 0);
@@ -1162,6 +1214,20 @@ export default function InfoproductHealthCheck({
 
       </div>
 
+      {viewMode === "MONTHLY" && (
+        <MonthlyBusinessCloseCard
+          monthLabel={formatMonthLabel(selectedMonth)}
+          revenue={totalRevenue}
+          adSpend={totalAdSpend}
+          fixedExpenses={totalFixedExpenses}
+          otherOperatingExpenses={totalOtherOperatingExpenses}
+          netResult={netResult}
+          healthStatus={healthStatus}
+          confidence={selectedCloseConfidence}
+          confidenceDetail={selectedConfidenceDetail}
+        />
+      )}
+
       {/* ── POSICIÓN GLOBAL: INDEPENDIENTE DEL PERIODO SELECCIONADO ── */}
       <section className="glass-card bg-gradient-to-br from-[#111114] via-[#0c0c0e] to-blue-950/10 border border-blue-500/15 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-white/[0.06] pb-4">
@@ -1183,7 +1249,7 @@ export default function InfoproductHealthCheck({
               ? "Configura caja"
               : globalDataLoading
               ? "Actualizando datos"
-              : `${businessPositionStatusLabel}${globalDataErrors.length > 0 || globalIncompletePeriods.length > 0 ? " · parcial" : ""}`}
+              : `${businessPositionStatusLabel}${globalDataErrors.length > 0 || globalIncompleteClosedPeriods.length > 0 || (currentVibeSummary && !currentVibeEstimateUsable) ? " · parcial" : ""}`}
           </span>
         </div>
 
@@ -1270,17 +1336,39 @@ export default function InfoproductHealthCheck({
           </div>
         )}
 
-        {globalIncompletePeriods.length > 0 && (
+        {globalIncompleteClosedPeriods.length > 0 && (
           <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-[11px] leading-relaxed text-amber-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              {globalIncompletePeriods.length} periodo{globalIncompletePeriods.length === 1 ? "" : "s"} de Vibe sigue{globalIncompletePeriods.length === 1 ? "" : "n"} provisional{globalIncompletePeriods.length === 1 ? "" : "es"} o con fuentes incompletas. Sus cifras quedan visibles como estimación, pero se excluyen de los cierres usados por el runway.
+              {globalIncompleteClosedPeriods.length} cierre{globalIncompleteClosedPeriods.length === 1 ? "" : "s"} histórico{globalIncompleteClosedPeriods.length === 1 ? "" : "s"} ({globalIncompleteClosedPeriods.map(formatMonthLabel).join(", ")}) sigue{globalIncompleteClosedPeriods.length === 1 ? "" : "n"} pendiente{globalIncompleteClosedPeriods.length === 1 ? "" : "s"}. Sus cifras quedan visibles como estimación, pero se excluyen del historial usado por el runway.
+            </p>
+          </div>
+        )}
+
+        {currentVibeSummary && currentVibeSummary.status === "PROVISIONAL" && (
+          <div
+            className={cn(
+              "flex items-start gap-2.5 rounded-2xl border p-3 text-[11px] leading-relaxed",
+              currentVibeEstimateUsable
+                ? "border-blue-500/20 bg-blue-500/[0.06] text-blue-200"
+                : "border-amber-500/20 bg-amber-500/[0.06] text-amber-200",
+            )}
+          >
+            {currentVibeEstimateUsable ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            )}
+            <p>
+              {currentVibeEstimateUsable
+                ? `${formatMonthLabel(currentMonthKey)} sigue abierto: el corte actual se usa como proyección, no como cierre histórico.`
+                : `${formatMonthLabel(currentMonthKey)} sigue abierto, pero aún tiene fuentes por completar; por ahora su proyección no alimenta el runway.`}
             </p>
           </div>
         )}
 
         <p className="text-[10px] leading-relaxed text-zinc-500">
-          Runway = caja disponible ÷ burn mensual. La base toma el escenario más conservador entre hasta 3 cierres Vibe finalizados y completos, la proyección actual confirmada y el compromiso fijo mensual. El registro manual funciona como respaldo cuando Vibe no está disponible.
+          Runway = caja disponible ÷ burn mensual. La base toma el escenario más conservador entre hasta 3 cierres Vibe finalizados y completos, una proyección actual con fuentes utilizables y el compromiso fijo mensual. El registro manual funciona como respaldo cuando Vibe no está disponible.
         </p>
       </section>
 
@@ -1293,12 +1381,13 @@ export default function InfoproductHealthCheck({
             summary={vibeSummary}
             loading={vibeLoading}
             error={vibeError}
+            isCurrentMonth={isCurrentMonthSelected}
             onRetry={() => setVibeRefreshKey((current) => current + 1)}
           />
 
           {/* ── 2. MÉTRICAS ACCIONABLES DEL MES ── */}
           <div className="space-y-3">
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="glass-card p-6 bg-[#0c0c0e]/90 border border-emerald-500/15 rounded-3xl flex flex-col justify-between space-y-3 shadow-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Ingresos del Mes</span>
@@ -1337,19 +1426,6 @@ export default function InfoproductHealthCheck({
                 </div>
               </div>
 
-              <div className={cn("glass-card p-6 bg-[#0c0c0e]/90 rounded-3xl flex flex-col justify-between space-y-3 shadow-xl border", netResult >= 0 ? "border-emerald-500/20" : "border-red-500/20")}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Resultado del Mes</span>
-                  {netResult >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-red-400" />}
-                </div>
-                <div>
-                  <p className={cn("text-xl sm:text-2xl font-black font-mono tracking-tight", netResult >= 0 ? "text-emerald-400" : "text-red-400")}>
-                    {netResult >= 0 ? `+${formatCurrency(netResult)}` : formatCurrency(netResult)}
-                  </p>
-                  <p className="text-[11px] text-zinc-500 font-mono mt-1">Ingresos − pauta − gastos conocidos</p>
-                </div>
-              </div>
-
               <div className="glass-card p-6 bg-[#0c0c0e]/90 border border-amber-500/15 rounded-3xl flex flex-col justify-between space-y-3 shadow-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Cobertura Fija</span>
@@ -1373,15 +1449,17 @@ export default function InfoproductHealthCheck({
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10px] text-zinc-500">
               <span>
                 Confianza del periodo:{" "}
-                {usingVibe
-                  ? `Vibe ${vibeSummary?.status === "FINAL" ? "final" : "provisional"}`
-                  : manualMonthOps.length > 0
-                    ? `registro manual${vibeError ? " · Vibe no disponible" : ""}`
-                    : selectedDataIncomplete
-                      ? vibeLoading
-                        ? "consultando Vibe"
-                        : "datos incompletos"
-                      : "sin operación registrada"}
+                {selectedCloseConfidence === "CONFIRMED"
+                  ? "cierre Vibe confirmado"
+                  : selectedCloseConfidence === "OPEN"
+                    ? "mes abierto con estimación utilizable"
+                    : selectedCloseConfidence === "INCOMPLETE"
+                      ? "estimación con fuentes por completar"
+                      : selectedCloseConfidence === "MANUAL"
+                        ? `respaldo manual${vibeError ? " · Vibe no disponible" : ""}`
+                        : selectedCloseConfidence === "LOADING"
+                          ? "consultando Vibe"
+                          : "solo gastos conocidos"}
               </span>
               <span>Los fijos se resuelven por vigencia recurrente.</span>
             </div>
@@ -1426,7 +1504,7 @@ export default function InfoproductHealthCheck({
                   >
                     ESTADO: {healthStatus === "BIEN" ? "BIEN" : healthStatus === "ATENCION" ? "ATENCIÓN" : "MAL"}
                   </span>
-                  <span className="text-[11px] text-zinc-500 font-mono">Health Check Operativo</span>
+                  <span className="text-[11px] text-zinc-500 font-mono">Salud financiera del periodo</span>
                 </div>
 
                 <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
@@ -1669,7 +1747,7 @@ export default function InfoproductHealthCheck({
                   Se aplican automáticamente desde el mes en que los declaras y en todos los siguientes
                 </p>
                 <p className="mt-1 text-[10px] text-zinc-500">
-                  El runway consolida estas series versionadas y los fijos/suscripciones de la pestaña Gastos, sin duplicar conceptos coincidentes.
+                  El runway consolida estas series versionadas y los fijos/suscripciones de la pestaña Compromisos, sin duplicar conceptos coincidentes.
                 </p>
               </div>
 
@@ -1722,7 +1800,7 @@ export default function InfoproductHealthCheck({
                     <div>
                       <p className="text-xs font-bold text-zinc-200">{expense.name}</p>
                       <p className="mt-1 text-[10px] text-zinc-500">
-                        Activo desde {formatMonthLabel(expense.effectiveFrom || expense.month)} · gestionado en la pestaña Gastos
+                        Activo desde {formatMonthLabel(expense.effectiveFrom || expense.month)} · gestionado en la pestaña Compromisos
                       </p>
                     </div>
 
@@ -1830,7 +1908,25 @@ export default function InfoproductHealthCheck({
             <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 text-[11px] leading-relaxed text-amber-200">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                El acumulado tiene {annualIncompleteMonths.length} mes{annualIncompleteMonths.length === 1 ? "" : "es"} con Vibe pendiente, provisional o con fuentes incompletas. Las cifras se conservan como estimación junto con los gastos conocidos; esos meses no reciben un diagnóstico confirmado ni alimentan el runway.
+                Hay {annualIncompleteMonths.length} cierre{annualIncompleteMonths.length === 1 ? "" : "s"} histórico{annualIncompleteMonths.length === 1 ? "" : "s"} pendiente{annualIncompleteMonths.length === 1 ? "" : "s"}: {annualIncompleteMonths.map((month) => formatMonthLabel(month.key)).join(", ")}. Sus ingresos, gastos y resultado siguen visibles como estimación, pero no alimentan el historial del runway.
+              </p>
+            </div>
+          )}
+
+          {annualCurrentIncompleteMonths.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 text-[11px] leading-relaxed text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                El acumulado incluye {annualCurrentIncompleteMonths.map((month) => formatMonthLabel(month.key)).join(", ")} con fuentes por completar. El resultado permanece visible como estimación, pero este corte todavía no alimenta el runway.
+              </p>
+            </div>
+          )}
+
+          {annualOpenMonths.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-blue-500/20 bg-blue-500/[0.06] p-4 text-[11px] leading-relaxed text-blue-200">
+              <Calendar className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                El acumulado incluye {annualOpenMonths.map((month) => formatMonthLabel(month.key)).join(", ")}, que sigue abierto. Sus cifras se muestran como estimación al corte y se confirmarán al iniciar el mes siguiente.
               </p>
             </div>
           )}
@@ -1864,8 +1960,6 @@ export default function InfoproductHealthCheck({
                       ? "bg-amber-950/20 border-amber-500/20 hover:border-amber-500/40"
                       : m.status === "MAL"
                       ? "bg-red-950/20 border-red-500/20 hover:border-red-500/40"
-                      : m.status === "INCOMPLETE"
-                      ? "bg-amber-950/10 border-amber-500/15 hover:border-amber-500/30"
                       : m.status === "PLANNED"
                       ? "bg-blue-950/20 border-blue-500/15 hover:border-blue-500/30"
                       : "bg-white/[0.01] border-white/[0.04] opacity-60"
@@ -1874,20 +1968,37 @@ export default function InfoproductHealthCheck({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black font-mono text-white">{m.monthName}</span>
                     <span className="text-sm">
-                      {m.status === "BIEN" ? "🟢" : m.status === "ATENCION" ? "🟡" : m.status === "MAL" ? "🔴" : m.status === "INCOMPLETE" ? "🟠" : m.status === "PLANNED" ? "🔵" : "⚪"}
+                      {m.status === "BIEN" ? "🟢" : m.status === "ATENCION" ? "🟡" : m.status === "MAL" ? "🔴" : m.status === "PLANNED" ? "🔵" : "⚪"}
                     </span>
                   </div>
+
+                  {!m.isFuture && m.confidence !== "EMPTY" && (
+                    <span
+                      className={cn(
+                        "self-start rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
+                        m.confidence === "CONFIRMED"
+                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                          : m.confidence === "OPEN"
+                            ? "border-blue-500/20 bg-blue-500/10 text-blue-300"
+                            : m.confidence === "MANUAL"
+                              ? "border-violet-500/20 bg-violet-500/10 text-violet-300"
+                              : "border-amber-500/20 bg-amber-500/10 text-amber-300",
+                      )}
+                    >
+                      {m.confidence === "CONFIRMED"
+                        ? "Cierre"
+                        : m.confidence === "OPEN"
+                          ? "Mes abierto"
+                          : m.confidence === "MANUAL"
+                            ? "Manual"
+                            : "Estimación"}
+                    </span>
+                  )}
 
                   {m.status === "PLANNED" ? (
                     <div className="space-y-1 font-mono text-[10px] text-blue-300">
                       <p className="font-black uppercase tracking-wider">Planeado</p>
                       <p>Fijos: {formatCurrency(m.fix)}</p>
-                      {m.other > 0 && <p>Otros: {formatCurrency(m.other)}</p>}
-                    </div>
-                  ) : m.status === "INCOMPLETE" ? (
-                    <div className="space-y-1 font-mono text-[10px] text-amber-300">
-                      <p className="font-black uppercase tracking-wider">Datos incompletos</p>
-                      <p>Fijos conocidos: {formatCurrency(m.fix)}</p>
                       {m.other > 0 && <p>Otros: {formatCurrency(m.other)}</p>}
                     </div>
                   ) : m.status !== "EMPTY" ? (

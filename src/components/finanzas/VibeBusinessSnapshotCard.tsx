@@ -1,6 +1,7 @@
 "use client";
 
 import type { VibeBusinessSummary } from "@/contracts/vibe-business";
+import { analyzeVibeBusinessSummaryQuality } from "@/lib/finance/business-metrics";
 import { cn, formatCurrencyPrecise } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -16,6 +17,7 @@ type Props = {
   loading: boolean;
   error: string;
   onRetry: () => void;
+  isCurrentMonth: boolean;
 };
 
 function sourceLabel(status: VibeBusinessSummary["quality"]["sources"][number]["status"]) {
@@ -36,6 +38,7 @@ export default function VibeBusinessSnapshotCard({
   loading,
   error,
   onRetry,
+  isCurrentMonth,
 }: Props) {
   if (!summary && loading) {
     return (
@@ -80,6 +83,50 @@ export default function VibeBusinessSnapshotCard({
     dateStyle: "medium",
     timeStyle: "short",
   });
+  const quality = analyzeVibeBusinessSummaryQuality(summary);
+  const qualityLabel = quality.complete
+    ? "Cierre confirmado"
+    : isCurrentMonth && quality.usableEstimate
+      ? "Mes abierto · estimación"
+      : isCurrentMonth
+        ? "Estimación incompleta"
+        : "Cierre pendiente";
+  const qualityTone = quality.complete
+    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+    : quality.usableEstimate && isCurrentMonth
+      ? "border-blue-500/20 bg-blue-500/10 text-blue-400"
+      : "border-amber-500/20 bg-amber-500/10 text-amber-400";
+
+  const blockingReasons = [
+    ...(!isCurrentMonth && !quality.statusFinal
+      ? ["Vibe aún no ha emitido el cierre final del mes."]
+      : []),
+    ...quality.sourceIssues.map((issue) => {
+      if (issue.reason === "MISSING") return `${issue.label}: fuente ausente.`;
+      if (issue.reason === "DUPLICATE") return `${issue.label}: fuente duplicada.`;
+      return `${issue.label}: ${issue.status ? sourceLabel(issue.status).toLowerCase() : "no disponible"}.`;
+    }),
+    ...(quality.missingChecks.length > 0
+      ? [`Faltan controles de cierre: ${quality.missingChecks.join(", ")}.`]
+      : []),
+    ...(quality.duplicateChecks.length > 0
+      ? [`Hay controles duplicados: ${quality.duplicateChecks.join(", ")}.`]
+      : []),
+    ...(quality.unexpectedChecks.length > 0
+      ? [`Hay controles no reconocidos: ${quality.unexpectedChecks.join(", ")}.`]
+      : []),
+    ...quality.errorChecks.map(
+      (check) => `${check.code}: ${check.label}.`,
+    ),
+    ...quality.dataIssues.map((issue) =>
+      issue.code === "UNCLASSIFIED_SPEND"
+        ? `Hay ${formatCurrencyPrecise(issue.value)} de pauta sin clasificar.`
+        : `${issue.value} venta${issue.value === 1 ? "" : "s"} quedó${issue.value === 1 ? "" : "aron"} en cuarentena por falta de fecha.`,
+    ),
+  ];
+  const warningChecks = summary.quality.checks.filter(
+    (check) => check.status === "WARNING",
+  );
 
   return (
     <div className="glass-card overflow-hidden rounded-3xl border border-amber-500/20 bg-[#0c0c0e]/90 shadow-xl">
@@ -99,12 +146,10 @@ export default function VibeBusinessSnapshotCard({
               <span
                 className={cn(
                   "rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-wider",
-                  summary.status === "FINAL"
-                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                    : "border-amber-500/20 bg-amber-500/10 text-amber-400",
+                  qualityTone,
                 )}
               >
-                {summary.status === "FINAL" ? "Cierre final" : "Corte provisional"}
+                {qualityLabel}
               </span>
             </div>
             <p className="mt-1 text-[11px] text-zinc-500">
@@ -181,12 +226,41 @@ export default function VibeBusinessSnapshotCard({
             </span>
           ))}
         </div>
-        {summary.quality.warnings.length > 0 && (
-          <p className="text-[10px] font-semibold text-amber-400">
-            {summary.quality.warnings.length} advertencia(s) de calidad · revisar antes de cerrar
+        {quality.complete ? (
+          <p className="text-[10px] font-semibold text-emerald-400">
+            Fuentes completas · cierre elegible para runway
           </p>
-        )}
+        ) : isCurrentMonth && quality.usableEstimate ? (
+          <p className="text-[10px] font-semibold text-blue-400">
+            Corte utilizable para la proyección · se confirma al terminar el mes
+          </p>
+        ) : null}
       </div>
+
+      {(blockingReasons.length > 0 || warningChecks.length > 0) && (
+        <div className="border-t border-white/[0.06] bg-amber-500/[0.035] px-6 py-4">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                {blockingReasons.length > 0
+                  ? "Qué falta para confirmar este cierre"
+                  : "Observaciones del corte"}
+              </p>
+              <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-zinc-400">
+                {blockingReasons.map((reason) => (
+                  <li key={reason}>• {reason}</li>
+                ))}
+                {warningChecks.map((check) => (
+                  <li key={`${check.code}:${check.label}`}>
+                    • {check.label} (advertencia, no bloquea por sí sola).
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

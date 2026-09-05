@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  analyzeVibeBusinessSummaryQuality,
   businessExpenseAppliesToMonth,
   canonicalRecurringIncomeIdentity,
   calculateBusinessPosition,
@@ -9,6 +10,7 @@ import {
   incomeLifecycleAction,
   incomeRemovalAction,
   isVibeBusinessSummaryComplete,
+  isVibeBusinessSummaryUsableEstimate,
   nextRecurringIncomeRevision,
   recurringIncomeIdentityMatches,
   recurringIncomeSeriesId,
@@ -19,6 +21,37 @@ import {
   totalRecurringFixedExpenses,
   totalRecurringFixedExpensesForMonths,
 } from "../src/lib/finance/business-metrics.ts";
+
+function vibeQuality(overrides = {}) {
+  return {
+    sources: [
+      { id: "meta", label: "Meta Ads", status: "connected", rows: 4 },
+      {
+        id: "clicchat",
+        label: "Ventas WhatsApp",
+        status: "empty",
+        rows: 0,
+      },
+      {
+        id: "platform",
+        label: "Ventas Landing",
+        status: "connected",
+        rows: 2,
+      },
+    ],
+    checks: Array.from({ length: 5 }, (_, index) => ({
+      code: `CHECK_${index + 1}`,
+      label: `Control ${index + 1}`,
+      status: "PASS",
+    })),
+    warnings: [],
+    quarantinedSalesWithoutDate: 0,
+    unattributedSales: 0,
+    unclassifiedSpend: 0,
+    excludedTestOrders: 0,
+    ...overrides,
+  };
+}
 
 test("la identidad mensual es estable y la revisión avanza un paso", () => {
   const first = {
@@ -538,6 +571,129 @@ test("solo un cierre Vibe final y sin fuentes incompletas se considera confirmad
     }),
     false,
   );
+});
+
+test("un mes Vibe provisional íntegro es estimación utilizable, no cierre histórico", () => {
+  const quality = vibeQuality({
+    checks: vibeQuality().checks.map((check) =>
+      check.code === "CHECK_1"
+        ? { ...check, status: "ERROR" }
+        : check,
+    ),
+  });
+  const analysis = analyzeVibeBusinessSummaryQuality({
+    status: "PROVISIONAL",
+    quality,
+  });
+
+  assert.equal(analysis.statusFinal, false);
+  assert.equal(analysis.complete, false);
+  assert.equal(analysis.usableEstimate, true);
+  assert.deepEqual(analysis.sourceIssues, []);
+  assert.deepEqual(analysis.errorChecks.map((check) => check.code), ["CHECK_1"]);
+  assert.equal(
+    isVibeBusinessSummaryUsableEstimate({ status: "PROVISIONAL", quality }),
+    true,
+  );
+  assert.equal(
+    isVibeBusinessSummaryComplete({ status: "PROVISIONAL", quality }),
+    false,
+  );
+});
+
+test("una fuente Platform ausente o no configurada bloquea cierre y estimación", () => {
+  const withoutPlatform = vibeQuality({
+    sources: vibeQuality().sources.filter((source) => source.id !== "platform"),
+  });
+  const missingAnalysis = analyzeVibeBusinessSummaryQuality({
+    status: "FINAL",
+    quality: withoutPlatform,
+  });
+
+  assert.equal(missingAnalysis.complete, false);
+  assert.equal(missingAnalysis.usableEstimate, false);
+  assert.deepEqual(
+    missingAnalysis.sourceIssues.map(({ id, reason }) => ({ id, reason })),
+    [{ id: "platform", reason: "MISSING" }],
+  );
+
+  const notConfigured = vibeQuality({
+    sources: vibeQuality().sources.map((source) =>
+      source.id === "platform"
+        ? { ...source, status: "not_configured" }
+        : source,
+    ),
+  });
+  const unavailableAnalysis = analyzeVibeBusinessSummaryQuality({
+    status: "PROVISIONAL",
+    quality: notConfigured,
+  });
+  assert.equal(unavailableAnalysis.usableEstimate, false);
+  assert.deepEqual(
+    unavailableAnalysis.sourceIssues.map(({ id, status, reason }) => ({
+      id,
+      status,
+      reason,
+    })),
+    [{ id: "platform", status: "not_configured", reason: "UNUSABLE" }],
+  );
+});
+
+test("un FINAL con un control operativo en error no se considera completo", () => {
+  const quality = vibeQuality({
+    checks: vibeQuality().checks.map((check) =>
+      check.code === "CHECK_4"
+        ? { ...check, status: "ERROR" }
+        : check,
+    ),
+  });
+  const analysis = analyzeVibeBusinessSummaryQuality({
+    status: "FINAL",
+    quality,
+  });
+
+  assert.equal(analysis.statusFinal, true);
+  assert.equal(analysis.complete, false);
+  assert.equal(analysis.usableEstimate, false);
+  assert.deepEqual(analysis.errorChecks.map((check) => check.code), ["CHECK_4"]);
+});
+
+test("el análisis identifica checks faltantes, duplicados e inesperados", () => {
+  const baseChecks = vibeQuality().checks;
+  const quality = vibeQuality({
+    checks: [
+      ...baseChecks.filter((check) => check.code !== "CHECK_3"),
+      baseChecks[1],
+      { code: "CHECK_6", label: "Control fuera de contrato", status: "PASS" },
+    ],
+  });
+  const analysis = analyzeVibeBusinessSummaryQuality({
+    status: "FINAL",
+    quality,
+  });
+
+  assert.deepEqual(analysis.missingChecks, ["CHECK_3"]);
+  assert.deepEqual(analysis.duplicateChecks, ["CHECK_2"]);
+  assert.deepEqual(analysis.unexpectedChecks, ["CHECK_6"]);
+  assert.equal(analysis.complete, false);
+  assert.equal(analysis.usableEstimate, false);
+});
+
+test("gasto sin clasificar y ventas en cuarentena bloquean cualquier cifra operable", () => {
+  for (const [field, expectedCode] of [
+    ["unclassifiedSpend", "UNCLASSIFIED_SPEND"],
+    ["quarantinedSalesWithoutDate", "QUARANTINED_SALES_WITHOUT_DATE"],
+  ]) {
+    const analysis = analyzeVibeBusinessSummaryQuality({
+      status: "FINAL",
+      quality: vibeQuality({ [field]: 125 }),
+    });
+
+    assert.equal(analysis.blockingDataIssues, true);
+    assert.equal(analysis.complete, false);
+    assert.equal(analysis.usableEstimate, false);
+    assert.deepEqual(analysis.dataIssues, [{ code: expectedCode, value: 125 }]);
+  }
 });
 
 test("los gastos fijos genéricos siguen activos en meses posteriores", () => {

@@ -346,42 +346,218 @@ export function resolveIncomesForMonth<T extends IncomeRecurrenceRecord>(
     .map((candidate) => candidate.income);
 }
 
+const VIBE_EXPECTED_SOURCES = ["meta", "clicchat", "platform"] as const;
+const VIBE_EXPECTED_CHECKS = [
+  "CHECK_1",
+  "CHECK_2",
+  "CHECK_3",
+  "CHECK_4",
+  "CHECK_5",
+] as const;
+
+type VibeExpectedSourceId = (typeof VIBE_EXPECTED_SOURCES)[number];
+type VibeSourceStatus = VibeBusinessSummary["quality"]["sources"][number]["status"];
+type VibeCheckStatus = VibeBusinessSummary["quality"]["checks"][number]["status"];
+
+export type VibeCloseSourceIssue = {
+  id: string;
+  label: string;
+  status: VibeSourceStatus | null;
+  reason: "MISSING" | "DUPLICATE" | "UNUSABLE";
+};
+
+export type VibeCloseCheckIssue = {
+  code: string;
+  label: string;
+  status: VibeCheckStatus;
+};
+
+export type VibeCloseDataIssue = {
+  code: "UNCLASSIFIED_SPEND" | "QUARANTINED_SALES_WITHOUT_DATE";
+  value: number;
+};
+
+export type VibeCloseQuality = {
+  /** True only for a finalized, complete historical close. */
+  complete: boolean;
+  /**
+   * True when the figures are safe to use as the current-month estimate.
+   * CHECK_1 may still be open while the month is in progress.
+   */
+  usableEstimate: boolean;
+  statusFinal: boolean;
+  sourceIssues: VibeCloseSourceIssue[];
+  missingChecks: string[];
+  duplicateChecks: string[];
+  unexpectedChecks: string[];
+  errorChecks: VibeCloseCheckIssue[];
+  dataIssues: VibeCloseDataIssue[];
+  blockingDataIssues: boolean;
+};
+
+const VIBE_SOURCE_LABELS: Record<VibeExpectedSourceId, string> = {
+  meta: "Meta Ads",
+  clicchat: "Ventas WhatsApp",
+  platform: "Ventas Landing",
+};
+
+function positiveFiniteValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : 0;
+}
+
+/**
+ * Analyses Vibe data quality without using dates or UI state.
+ *
+ * Consumers decide whether the summary belongs to the current month. A
+ * PROVISIONAL summary can be a usable current estimate, but only FINAL can be
+ * a confirmed historical close.
+ */
+export function analyzeVibeBusinessSummaryQuality(
+  summary: Pick<VibeBusinessSummary, "status" | "quality">,
+): VibeCloseQuality {
+  const expectedSourceIds = new Set<string>(VIBE_EXPECTED_SOURCES);
+  const sourcesById = new Map<
+    string,
+    VibeBusinessSummary["quality"]["sources"]
+  >();
+
+  summary.quality.sources.forEach((source) => {
+    const matches = sourcesById.get(source.id) || [];
+    matches.push(source);
+    sourcesById.set(source.id, matches);
+  });
+
+  const sourceIssues: VibeCloseSourceIssue[] = [];
+  VIBE_EXPECTED_SOURCES.forEach((id) => {
+    const matches = sourcesById.get(id) || [];
+    if (matches.length === 0) {
+      sourceIssues.push({
+        id,
+        label: VIBE_SOURCE_LABELS[id],
+        status: null,
+        reason: "MISSING",
+      });
+      return;
+    }
+
+    if (matches.length > 1) {
+      sourceIssues.push({
+        id,
+        label: matches[0].label || VIBE_SOURCE_LABELS[id],
+        status: matches[0].status,
+        reason: "DUPLICATE",
+      });
+    }
+
+    matches.forEach((source) => {
+      if (source.status !== "connected" && source.status !== "empty") {
+        sourceIssues.push({
+          id,
+          label: source.label || VIBE_SOURCE_LABELS[id],
+          status: source.status,
+          reason: "UNUSABLE",
+        });
+      }
+    });
+  });
+
+  summary.quality.sources
+    .filter((source) => !expectedSourceIds.has(source.id))
+    .forEach((source) => {
+      sourceIssues.push({
+        id: source.id,
+        label: source.label,
+        status: source.status,
+        reason: "UNUSABLE",
+      });
+    });
+
+  const expectedCheckCodes = new Set<string>(VIBE_EXPECTED_CHECKS);
+  const checksByCode = new Map<
+    string,
+    VibeBusinessSummary["quality"]["checks"]
+  >();
+  summary.quality.checks.forEach((check) => {
+    const matches = checksByCode.get(check.code) || [];
+    matches.push(check);
+    checksByCode.set(check.code, matches);
+  });
+
+  const missingChecks = VIBE_EXPECTED_CHECKS.filter(
+    (code) => !checksByCode.has(code),
+  );
+  const duplicateChecks = Array.from(checksByCode.entries())
+    .filter(([, checks]) => checks.length > 1)
+    .map(([code]) => code)
+    .sort();
+  const unexpectedChecks = Array.from(checksByCode.keys())
+    .filter((code) => !expectedCheckCodes.has(code))
+    .sort();
+  const errorChecks = summary.quality.checks
+    .filter((check) => check.status === "ERROR")
+    .map((check) => ({
+      code: check.code,
+      label: check.label,
+      status: check.status,
+    }));
+
+  const dataIssues: VibeCloseDataIssue[] = [];
+  const unclassifiedSpend = positiveFiniteValue(
+    summary.quality.unclassifiedSpend,
+  );
+  if (unclassifiedSpend > 0) {
+    dataIssues.push({ code: "UNCLASSIFIED_SPEND", value: unclassifiedSpend });
+  }
+  const quarantinedSales = positiveFiniteValue(
+    summary.quality.quarantinedSalesWithoutDate,
+  );
+  if (quarantinedSales > 0) {
+    dataIssues.push({
+      code: "QUARANTINED_SALES_WITHOUT_DATE",
+      value: quarantinedSales,
+    });
+  }
+
+  const hasCompleteCheckSet =
+    missingChecks.length === 0 &&
+    duplicateChecks.length === 0 &&
+    unexpectedChecks.length === 0;
+  const hasUsableSources = sourceIssues.length === 0;
+  const blockingDataIssues = dataIssues.length > 0;
+  const hasHistoricalCheckError = errorChecks.length > 0;
+  const hasEstimateCheckError = errorChecks.some(
+    (check) => check.code !== "CHECK_1",
+  );
+  const commonIntegrity =
+    hasUsableSources && hasCompleteCheckSet && !blockingDataIssues;
+  const statusFinal = summary.status === "FINAL";
+
+  return {
+    complete: statusFinal && commonIntegrity && !hasHistoricalCheckError,
+    usableEstimate: commonIntegrity && !hasEstimateCheckError,
+    statusFinal,
+    sourceIssues,
+    missingChecks: [...missingChecks],
+    duplicateChecks,
+    unexpectedChecks,
+    errorChecks,
+    dataIssues,
+    blockingDataIssues,
+  };
+}
+
 export function isVibeBusinessSummaryComplete(
   summary: Pick<VibeBusinessSummary, "status" | "quality">,
 ): boolean {
-  if (summary.status !== "FINAL") return false;
+  return analyzeVibeBusinessSummaryQuality(summary).complete;
+}
 
-  const expectedSources = new Set(["meta", "clicchat", "platform"]);
-  const seenSources = new Set<string>();
-  const hasInvalidSource = summary.quality.sources.some((source) => {
-    if (!expectedSources.has(source.id) || seenSources.has(source.id)) {
-      return true;
-    }
-    seenSources.add(source.id);
-    return source.status !== "connected" && source.status !== "empty";
-  });
-  const hasBlockingCheck = summary.quality.checks.some(
-    (check) => check.status === "ERROR",
-  );
-  const expectedCheckCodes = new Set([
-    "CHECK_1",
-    "CHECK_2",
-    "CHECK_3",
-    "CHECK_4",
-    "CHECK_5",
-  ]);
-  const checkCodes = new Set(summary.quality.checks.map((check) => check.code));
-  const hasCompleteChecks =
-    summary.quality.checks.length === expectedCheckCodes.size &&
-    checkCodes.size === expectedCheckCodes.size &&
-    Array.from(expectedCheckCodes).every((code) => checkCodes.has(code));
-
-  return (
-    !hasInvalidSource &&
-    seenSources.size === expectedSources.size &&
-    hasCompleteChecks &&
-    !hasBlockingCheck
-  );
+export function isVibeBusinessSummaryUsableEstimate(
+  summary: Pick<VibeBusinessSummary, "status" | "quality">,
+): boolean {
+  return analyzeVibeBusinessSummaryQuality(summary).usableEstimate;
 }
 
 export function nonNegativeExpenseAmount(value: unknown): number {

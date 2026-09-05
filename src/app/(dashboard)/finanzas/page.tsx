@@ -283,7 +283,7 @@ export default function FinanzasPage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modal, setModal] = useState<
-    "income" | "expense" | "debt" | "saving" | "milestone" | "business_config" | "product" | null
+    "income" | "expense" | "debt" | "saving" | "milestone" | "product" | null
   >(null);
 
   // Form slide-over visual transition states
@@ -298,8 +298,6 @@ export default function FinanzasPage() {
   const [businessCashConfigured, setBusinessCashConfigured] = useState(false);
   const [businessCashNeedsReview, setBusinessCashNeedsReview] = useState(false);
   const [productTestCost, setProductTestCost] = useState<number>(1000);
-  const [bCashInput, setBCashInput] = useState("");
-  const [bTestCostInput, setBTestCostInput] = useState("");
 
   // ── Product form ──
   const [pName, setPName] = useState("");
@@ -440,8 +438,6 @@ export default function FinanzasPage() {
       setBusinessCashConfigured(hasCurrentCash || hasLegacyCapital);
       setBusinessCashNeedsReview(!hasCurrentCash && hasLegacyCapital);
       setProductTestCost(tCost);
-      setBCashInput(cash.toString());
-      setBTestCostInput(tCost.toString());
     }
 
     const [i, e, d, prods, iOps, iFixed] = await Promise.all([
@@ -575,39 +571,6 @@ export default function FinanzasPage() {
     setEditingId(null);
   };
 
-  const openEditBusinessConfig = () => {
-    setBCashInput(availableBusinessCash.toString());
-    setBTestCostInput(productTestCost.toString());
-    setModal("business_config");
-  };
-
-  const saveBusinessConfig = async () => {
-    if (!uid) return;
-    const parsedCash = Number(bCashInput);
-    const parsedTestCost = Number(bTestCostInput);
-    const cash = Number.isFinite(parsedCash) ? parsedCash : 0;
-    const tCost =
-      Number.isFinite(parsedTestCost) && parsedTestCost > 0
-        ? parsedTestCost
-        : 1000;
-    setAvailableBusinessCash(cash);
-    setBusinessCashConfigured(true);
-    setBusinessCashNeedsReview(false);
-    setProductTestCost(tCost);
-
-    await setDoc(
-      doc(db, "users", uid, "finance", "business_config"),
-      {
-        availableBusinessCash: cash,
-        initialBusinessCapital: cash,
-        productTestCost: tCost,
-      },
-      { merge: true }
-    );
-    closeModal();
-    loadData();
-  };
-
   const openCreateProduct = () => {
     setEditingId(null);
     setPName("");
@@ -682,7 +645,7 @@ export default function FinanzasPage() {
     setEName("");
     setECat("COMIDA");
     setEAmount("");
-    setEType("VARIABLE");
+    setEType(financialContext === "BUSINESS" ? "FIJO" : "VARIABLE");
     setEChargeDay("");
     setEProductId("");
     setEProductName("");
@@ -1242,11 +1205,8 @@ export default function FinanzasPage() {
   const tabs: { key: TabType; label: string; icon: React.ElementType }[] =
     financialContext === "BUSINESS"
       ? [
-          { key: "health-check", label: "Health Check 🟢", icon: ShieldCheck },
-          { key: "resumen", label: "Resumen", icon: Wallet },
-          { key: "ingresos", label: "Ingresos", icon: TrendingUp },
-          { key: "gastos", label: "Gastos", icon: TrendingDown },
-          { key: "productos", label: "Productos", icon: Package },
+          { key: "health-check", label: "Cierre mensual", icon: ShieldCheck },
+          { key: "gastos", label: "Compromisos", icon: Layers },
         ]
       : [
           { key: "resumen", label: "Resumen", icon: Wallet },
@@ -1300,16 +1260,6 @@ export default function FinanzasPage() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
-          {financialContext === "BUSINESS" && (
-            <button
-              onClick={openEditBusinessConfig}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold bg-white/5 border border-white/10 text-zinc-300 hover:text-amber-400 hover:border-amber-500/30 transition-all"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              Configurar Presupuesto
-            </button>
-          )}
-
           {/* Selector [ Personal ] [ Negocio ] */}
           <div className="flex items-center gap-1.5 bg-zinc-950/80 p-1.5 border border-white/10 rounded-2xl shrink-0">
             <button
@@ -1746,13 +1696,13 @@ export default function FinanzasPage() {
       ══════════════════════════════════════ */}
       {activeTab === "gastos" && (
         <Section
-          title={financialContext === "BUSINESS" ? "Gastos del Negocio" : "Listado de Conceptos de Gastos"}
+          title={financialContext === "BUSINESS" ? "Compromisos y gastos del negocio" : "Listado de Conceptos de Gastos"}
           action={
             <button
               onClick={openCreateExpense}
               className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
             >
-              <Plus className="w-4 h-4" /> Agregar Gasto
+              <Plus className="w-4 h-4" /> {financialContext === "BUSINESS" ? "Agregar compromiso" : "Agregar Gasto"}
             </button>
           }
         >
@@ -1811,13 +1761,19 @@ export default function FinanzasPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-white/5 rounded-2xl bg-[#0c0c0e]/30">
               <TrendingDown className="w-8 h-8 text-zinc-600 mb-3" />
-              <h3 className="text-xs font-bold text-zinc-300">Sin Gastos Registrados</h3>
-              <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">Controla tus gastos fijos y variables para calcular tu capacidad de ahorro real mensual.</p>
+              <h3 className="text-xs font-bold text-zinc-300">
+                {financialContext === "BUSINESS" ? "Sin compromisos registrados" : "Sin Gastos Registrados"}
+              </h3>
+              <p className="text-[10px] text-zinc-500 max-w-xs mx-auto mt-1 mb-4">
+                {financialContext === "BUSINESS"
+                  ? "Registra aquí compromisos recurrentes y gastos puntuales del negocio; el cierre los incorporará automáticamente."
+                  : "Controla tus gastos fijos y variables para calcular tu capacidad de ahorro real mensual."}
+              </p>
               <button
                 onClick={openCreateExpense}
                 className="btn-primary pl-3 pr-4 h-9 rounded-xl text-xs"
               >
-                + Registrar Primer Gasto
+                {financialContext === "BUSINESS" ? "+ Registrar Primer Compromiso" : "+ Registrar Primer Gasto"}
               </button>
             </div>
           )}
@@ -2199,7 +2155,6 @@ export default function FinanzasPage() {
                      modal === "expense" ? "Gasto" :
                      modal === "debt" ? "Parámetro de Deuda" :
                      modal === "saving" ? "Ciclo de Ahorro" :
-                     modal === "business_config" ? "Configuración del Negocio" :
                      modal === "product" ? "Producto" : "Milestone"}
                   </h3>
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Métricas y Parámetros</p>
@@ -2273,45 +2228,6 @@ export default function FinanzasPage() {
                         </button>
                       ))}
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Business Config Form ── */}
-              {modal === "business_config" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
-                      Caja / Capital disponible actual
-                    </label>
-                    <input 
-                      type="number" 
-                      value={bCashInput}
-                      onChange={(e) => setBCashInput(e.target.value)}
-                      placeholder="Ej: 50000" 
-                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
-                    <p className="text-[11px] text-zinc-500 mt-1.5 leading-normal">
-                      Registra el efectivo líquido disponible hoy para operar el negocio. Actualízalo cuando cambie tu saldo real.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">
-                      Costo Promedio por Test de Producto
-                    </label>
-                    <input 
-                      type="number" 
-                      min="0.01"
-                      step="0.01"
-                      value={bTestCostInput} 
-                      onChange={(e) => setBTestCostInput(e.target.value)} 
-                      placeholder="Ej: 1000" 
-                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
-                    <p className="text-[11px] text-zinc-500 mt-1.5 leading-normal">
-                      Costo aproximado por cada nuevo producto a testear/lanzar. Servirá para calcular cuántos productos más puedes probar con tu capital actual.
-                    </p>
                   </div>
                 </div>
               )}
@@ -2866,7 +2782,6 @@ export default function FinanzasPage() {
               <button 
                 onClick={
                   modal === "product" ? saveProduct :
-                  modal === "business_config" ? saveBusinessConfig :
                   modal === "income" ? saveIncome :
                   modal === "expense" ? saveExpense :
                   modal === "debt" ? saveDebt :
@@ -2879,13 +2794,12 @@ export default function FinanzasPage() {
                     ? !eName.trim() || !Number.isFinite(Number(eAmount)) || Number(eAmount) <= 0
                     :
                   modal === "debt" ? !dEntity.trim() :
-                  modal === "business_config" ? false :
                   modal === "saving" ? false : !mName.trim()
                 } 
                 className="btn-primary pl-4 pr-5 h-11 disabled:opacity-50 disabled:grayscale transition-all duration-300 flex items-center justify-center gap-1.5 rounded-xl text-xs font-black shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:shadow-[0_0_30px_rgba(245,158,11,0.25)]"
               >
                 <Save className="w-4 h-4" />
-                {modal === "business_config" ? "Guardar Configuración" : modal === "product" ? (editingId ? "Guardar Cambios" : "Crear Producto") : editingId ? "Guardar Cambios" : "Agregar"}
+                {modal === "product" ? (editingId ? "Guardar Cambios" : "Crear Producto") : editingId ? "Guardar Cambios" : "Agregar"}
               </button>
             </div>
           </div>
