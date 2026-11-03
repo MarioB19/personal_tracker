@@ -646,3 +646,68 @@ export function summarizeProgress(progress: MonthProgress[]): ProgressSummary {
     lastRealAccumulated: withReal.length ? withReal[withReal.length - 1].realAccumulated : null,
   };
 }
+
+// ── Hitos (metas de dinero) con avance automático ──
+
+/**
+ * REACHED: el dinero real ya llegó a la meta · MISSED: la fecha pasó sin llegar ·
+ * ON_TRACK: el plan llega a tiempo · BEHIND: con el plan no alcanza.
+ */
+export type MilestoneProgressStatus = "REACHED" | "MISSED" | "ON_TRACK" | "BEHIND";
+
+export interface MilestoneProgress {
+  id: string;
+  name: string;
+  target: number;
+  /** Dinero real (sin lo apartado con destino) al último mes con dato dentro del plazo; null si aún no hay. */
+  current: number | null;
+  asOfMonth: number | null;
+  /** Dinero proyectado (sin lo apartado con destino) al cierre del plazo. */
+  projected: number;
+  percent: number;
+  status: MilestoneProgressStatus;
+}
+
+/** Lo apartado del dinero inicial no cuenta para otras metas: ya tiene destino. */
+function earmarkedAt(plan: PlanDraft, month: number): number {
+  if (!plan.earmarked) return 0;
+  if (plan.anchor && month < plan.anchor.month) return 0;
+  return plan.earmarked.amount;
+}
+
+/**
+ * Avance de cada hito calculado solo: dinero real acumulado (ahorro registrado
+ * y corte) hasta su fecha límite, y la proyección del plan a esa fecha.
+ */
+export function computeMilestoneProgress(
+  plan: PlanDraft,
+  months: PlanMonth[],
+  currentMonth: number,
+): MilestoneProgress[] {
+  const progress = computeMonthProgress(plan, months, currentMonth);
+  return plan.milestones.map((milestone) => {
+    const endMonth = Math.min(PLAN_MONTHS - 1, Math.max(0, milestone.endMonth));
+    let asOfMonth: number | null = null;
+    for (let month = endMonth; month >= 0; month -= 1) {
+      if (progress[month]?.realAccumulated !== null && progress[month]?.realAccumulated !== undefined) {
+        asOfMonth = month;
+        break;
+      }
+    }
+    const current =
+      asOfMonth === null ? null : roundMoney((progress[asOfMonth].realAccumulated ?? 0) - earmarkedAt(plan, asOfMonth));
+    const projected = roundMoney((months[endMonth]?.accumulated ?? 0) - earmarkedAt(plan, endMonth));
+    const target = roundMoney(milestone.amount);
+    const percent =
+      target > 0 && current !== null ? Math.min(100, Math.max(0, Math.round((current / target) * 100))) : 0;
+    const status: MilestoneProgressStatus =
+      current !== null && target > 0 && current >= target
+        ? "REACHED"
+        : endMonth < currentMonth
+          ? "MISSED"
+          : target > 0 && projected >= target
+            ? "ON_TRACK"
+            : "BEHIND";
+    return { id: milestone.id, name: milestone.name, target, current, asOfMonth, projected, percent, status };
+  });
+}

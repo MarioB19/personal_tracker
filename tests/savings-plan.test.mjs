@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  computeMilestoneProgress,
   computeMonthProgress,
   computePlanMonths,
   evaluateFinancialCut,
@@ -285,4 +286,47 @@ test("without a cut, earmarked money is reserved from january; zero or invalid i
   assert.equal(computePlanMonths(plan)[0].reservedAccumulated, 120_000);
   assert.equal(normalizeSavingsPlan({ earmarked: { label: "x", amount: 0 } }, 2027).earmarked, null);
   assert.equal(normalizeSavingsPlan({ earmarked: "bad" }, 2027).earmarked, null);
+});
+
+test("milestones track real money automatically and leave earmarked money out", () => {
+  const plan = normalizeSavingsPlan(
+    {
+      initialSavings: 10_000,
+      incomeSources: [{ id: "s", name: "Sueldo", values: Array(12).fill(20_000) }],
+      expenseLines: [{ id: "e", name: "Gastos", group: "PERSONAL", context: "PERSONAL", values: Array(12).fill(10_000) }],
+      actualSavingsValues: [5_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000],
+      anchor: { cutId: "c", date: "2026-11-02", month: 10, balance: 120_000 },
+      earmarked: { label: "Fondo del coche", amount: 120_000 },
+      milestones: [
+        { id: "mid", name: "Mitad de año", amount: 50_000, startMonth: 2, endMonth: 6, currentAmount: 999_999 },
+        { id: "early", name: "Primavera", amount: 20_000, startMonth: 0, endMonth: 3 },
+        { id: "car", name: "Post coche", amount: 30_000, startMonth: 11, endMonth: 11 },
+        { id: "far", name: "Lejos", amount: 15_000, startMonth: 11, endMonth: 11 },
+      ],
+    },
+    2026,
+  );
+  const months = computePlanMonths(plan);
+  const [mid, early, car, far] = computeMilestoneProgress(plan, months, 10);
+  // Julio: 10,000 + 7 × 5,000 = 45,000; la meta guardada a mano se ignora.
+  assert.deepEqual({ current: mid.current, asOf: mid.asOfMonth, status: mid.status, percent: mid.percent }, { current: 45_000, asOf: 6, status: "MISSED", percent: 90 });
+  assert.equal(early.status, "REACHED");
+  // Noviembre: 120,000 reales, todos del coche → 0 libres; el plan llega a 10,000 + 10,000 = 20,000 en diciembre.
+  assert.deepEqual({ current: car.current, asOf: car.asOfMonth, projected: car.projected, status: car.status }, { current: 0, asOf: 10, projected: 20_000, status: "BEHIND" });
+  assert.equal(far.status, "ON_TRACK");
+});
+
+test("milestones of a year that has not started have no real money yet", () => {
+  const plan = normalizeSavingsPlan(
+    {
+      initialSavings: 100_000,
+      incomeSources: [{ id: "s", name: "S", values: Array(12).fill(10_000) }],
+      milestones: [{ id: "a", name: "A", amount: 150_000, startMonth: 0, endMonth: 4 }],
+    },
+    2027,
+  );
+  const [a] = computeMilestoneProgress(plan, computePlanMonths(plan), -1);
+  assert.equal(a.current, null);
+  assert.equal(a.projected, 150_000);
+  assert.equal(a.status, "ON_TRACK");
 });
