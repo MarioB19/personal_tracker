@@ -401,9 +401,11 @@ export default function PlanificadorPage() {
           tone={closing < 0 ? "rose" : "amber"}
           value={formatCurrency(closing)}
           hint={
-            plan.anchor
-              ? `Parte de ${formatCurrency(plan.anchor.balance)} reales al ${plan.anchor.date}`
-              : `Parte de ${formatCurrency(plan.initialSavings)} al iniciar el año`
+            `${
+              plan.anchor
+                ? `Parte de ${formatCurrency(plan.anchor.balance)} reales al ${plan.anchor.date}`
+                : `Parte de ${formatCurrency(plan.initialSavings)} al iniciar el año`
+            }${plan.earmarked ? ` · sin ${plan.earmarked.label}: ${formatCurrency(closing - plan.earmarked.amount)}` : ""}`
           }
         />
       </div>
@@ -453,7 +455,14 @@ export default function PlanificadorPage() {
           {[
             { label: "Ingresos", value: summary.income, tone: "text-emerald-300", hint: `Personal ${formatCurrency(summary.incomeByContext.PERSONAL)} · Negocio ${formatCurrency(summary.incomeByContext.BUSINESS)}` },
             { label: "Gastos", value: summary.spend, tone: "text-rose-300", hint: `Personal ${formatCurrency(summary.expensesByGroup.PERSONAL)} · Negocio ${formatCurrency(summary.expensesByGroup.BUSINESS)}` },
-            { label: "Apartado", value: summary.reserved, tone: "text-sky-300", hint: "Ahorro con nombre (sigue siendo tuyo)" },
+            {
+              label: "Apartado",
+              value: summary.reserved,
+              tone: "text-sky-300",
+              hint: plan.earmarked
+                ? `Además, ${plan.earmarked.label}: ${formatCurrency(plan.earmarked.amount)}`
+                : "Ahorro con nombre (sigue siendo tuyo)",
+            },
             {
               label: "Libre",
               value: summary.free,
@@ -507,6 +516,33 @@ export default function PlanificadorPage() {
               ) : null}
             </>
           )}
+          <label className="flex flex-wrap items-center gap-2">
+            Ya apartado de ese dinero
+            <input
+              type="text"
+              value={plan.earmarked?.label ?? ""}
+              placeholder="p. ej. Fondo del coche"
+              aria-label="Para qué está apartado el dinero inicial"
+              onChange={(event) => {
+                const label = event.target.value;
+                update((draft) => ({ ...draft, earmarked: { label, amount: draft.earmarked?.amount ?? 0 } }));
+              }}
+              className="h-9 w-44 rounded-lg border border-white/10 bg-black/30 px-2.5 text-sm text-zinc-100 outline-none transition-colors focus:border-amber-500/40"
+            />
+            <MoneyInput
+              variant="field"
+              value={plan.earmarked?.amount ?? 0}
+              onChange={(amount) =>
+                update((draft) => ({
+                  ...draft,
+                  earmarked: amount > 0 || draft.earmarked?.label ? { label: draft.earmarked?.label || "Apartado", amount } : null,
+                }))
+              }
+              ariaLabel="Monto apartado del dinero inicial"
+              placeholder="0"
+              className="w-32"
+            />
+          </label>
         </div>
 
       <PlanLineTable

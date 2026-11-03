@@ -286,6 +286,7 @@ export default function FinanzasPage() {
   const [initialSavings, setInitialSavings] = useState<number>(0);
   /** Dinero real al corte financiero: desde ese mes el ahorro parte de ahí. */
   const [savingsAnchor, setSavingsAnchor] = useState<{ month: number; balance: number } | null>(null);
+  const [savingsEarmark, setSavingsEarmark] = useState<{ label: string; amount: number } | null>(null);
   const [plannedMonth, setPlannedMonth] = useState<PlanMonth | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -383,6 +384,7 @@ export default function FinanzasPage() {
       const initial = data.initialSavings || 0;
       setInitialSavings(initial);
       setSavingsAnchor(data.anchor ? { month: data.anchor.month, balance: data.anchor.balance } : null);
+      setSavingsEarmark(data.earmarked);
       const acts = data.actualSavingsValues;
       const plannedMonths = computePlanMonths(data);
       setPlannedMonth(plannedMonths[Number(monthInMexicoCity().slice(5, 7)) - 1] ?? null);
@@ -1362,7 +1364,13 @@ export default function FinanzasPage() {
               icon={PiggyBank}
               label="Total ahorrado"
               value={formatCurrency(totalSaved)}
-              sub={avgCostPerHour > 0 ? `Tu hora vale ${formatCurrency(avgCostPerHour)}` : "Sin salario base"}
+              sub={
+                savingsEarmark
+                  ? `Incluye ${savingsEarmark.label}: ${formatCurrency(savingsEarmark.amount)}`
+                  : avgCostPerHour > 0
+                    ? `Tu hora vale ${formatCurrency(avgCostPerHour)}`
+                    : "Sin salario base"
+              }
               color="blue"
               className="col-span-2 lg:col-span-1"
             />
