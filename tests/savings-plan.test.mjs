@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  computeMonthProgress,
   computePlanMonths,
   evaluateFinancialCut,
   legacyExpensesValues,
@@ -11,6 +12,7 @@ import {
   repeatFromMonth,
   savingsPlanDocumentId,
   summarizePlanYear,
+  summarizeProgress,
 } from "../src/lib/planning/savings-plan.ts";
 
 const months = (entries) => Array.from({ length: 12 }, (_, i) => entries[i] ?? 0);
@@ -213,4 +215,47 @@ test("malformed cut terms are dropped instead of crashing the planner", () => {
   assert.deepEqual(cut.checks[0].terms, [{ kind: "accounts", sign: 1 }]);
   const [result] = evaluateFinancialCut(cut, {});
   assert.equal(result.computed, 10);
+});
+
+test("month progress compares planned and real savings", () => {
+  const plan = normalizeSavingsPlan(
+    {
+      initialSavings: 1_000,
+      incomeSources: [{ id: "s", name: "Sueldo", values: Array(12).fill(10_000) }],
+      expenseLines: [{ id: "e", name: "Gastos", group: "PERSONAL", context: "PERSONAL", values: Array(12).fill(6_000) }],
+      actualSavingsValues: [5_000, 3_000],
+    },
+    2026,
+  );
+  const progress = computeMonthProgress(plan, computePlanMonths(plan), 2);
+  assert.equal(progress[0].plan, 4_000);
+  assert.equal(progress[0].status, "DONE");
+  assert.equal(progress[0].difference, 1_000);
+  assert.equal(progress[1].difference, -1_000);
+  assert.equal(progress[2].status, "CURRENT");
+  assert.equal(progress[3].status, "FUTURE");
+  assert.equal(progress[1].realAccumulated, 9_000);
+  assert.equal(progress[3].realAccumulated, null);
+  const summary = summarizeProgress(progress);
+  assert.deepEqual(
+    { tracked: summary.trackedMonths, plan: summary.planToDate, real: summary.realToDate, diff: summary.difference },
+    { tracked: 2, plan: 8_000, real: 8_000, diff: 0 },
+  );
+});
+
+test("a past month without real savings is flagged as missing", () => {
+  const plan = normalizeSavingsPlan({ incomeSources: [{ id: "s", name: "S", values: Array(12).fill(100) }] }, 2026);
+  const progress = computeMonthProgress(plan, computePlanMonths(plan), 3);
+  assert.equal(progress[0].status, "MISSING");
+  assert.equal(progress[3].status, "CURRENT");
+});
+
+test("a past month with nothing planned and nothing saved is not flagged", () => {
+  const plan = normalizeSavingsPlan(
+    { incomeSources: [{ id: "s", name: "S", values: [0, 0, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100] }] },
+    2026,
+  );
+  const progress = computeMonthProgress(plan, computePlanMonths(plan), 5);
+  assert.equal(progress[0].status, "EMPTY");
+  assert.equal(progress[2].status, "MISSING");
 });
