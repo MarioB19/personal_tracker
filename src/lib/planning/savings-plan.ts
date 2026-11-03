@@ -538,3 +538,95 @@ export function normalizeFinancialCut(
     revision: Number.isInteger(raw.revision) ? (raw.revision as number) : 0,
   };
 }
+
+// ─────────────────────────────────────────────
+// Avance mes a mes (plan contra real)
+// ─────────────────────────────────────────────
+
+/** EMPTY: mes pasado sin plan ni registro (no hay nada que comparar). */
+export type MonthProgressStatus = "DONE" | "MISSING" | "EMPTY" | "CURRENT" | "FUTURE";
+
+export interface MonthProgress {
+  month: number;
+  /** Ahorro planeado del mes: ingresos − gastos. */
+  plan: number;
+  /** Ahorro real registrado; null si no se capturó. */
+  real: number | null;
+  /** real − plan (solo si hay real). */
+  difference: number | null;
+  status: MonthProgressStatus;
+  planAccumulated: number;
+  /** Dinero real acumulado; null en meses sin registro posteriores al último real. */
+  realAccumulated: number | null;
+}
+
+export interface ProgressSummary {
+  trackedMonths: number;
+  planToDate: number;
+  realToDate: number;
+  difference: number;
+  lastRealAccumulated: number | null;
+}
+
+/**
+ * Compara mes a mes el ahorro planeado con el real. `currentMonth` es el
+ * índice (0–11) del mes en curso dentro del año del plan, o null si el año
+ * ya terminó (12) / todavía no empieza (-1).
+ */
+export function computeMonthProgress(
+  plan: PlanDraft,
+  months: PlanMonth[],
+  currentMonth: number,
+): MonthProgress[] {
+  let realAccumulated = plan.initialSavings;
+  let lastRealMonth = -1;
+  plan.actualSavingsValues.forEach((value, index) => {
+    if (value) lastRealMonth = index;
+  });
+
+  return months.map((month) => {
+    const raw = plan.actualSavingsValues[month.month] ?? 0;
+    const hasReal = raw !== 0;
+    if (plan.anchor && month.month === plan.anchor.month) {
+      realAccumulated = plan.anchor.balance;
+    }
+    realAccumulated = roundMoney(realAccumulated + raw);
+    const status: MonthProgressStatus =
+      month.month < currentMonth
+        ? hasReal
+          ? "DONE"
+          : month.net
+            ? "MISSING"
+            : "EMPTY"
+        : month.month === currentMonth
+          ? hasReal
+            ? "DONE"
+            : "CURRENT"
+          : hasReal
+            ? "DONE"
+            : "FUTURE";
+    return {
+      month: month.month,
+      plan: month.net,
+      real: hasReal ? raw : null,
+      difference: hasReal ? roundMoney(raw - month.net) : null,
+      status,
+      planAccumulated: month.accumulated,
+      realAccumulated: month.month <= Math.max(lastRealMonth, Math.min(currentMonth, 11)) ? realAccumulated : null,
+    };
+  });
+}
+
+export function summarizeProgress(progress: MonthProgress[]): ProgressSummary {
+  const tracked = progress.filter((item) => item.real !== null);
+  const planToDate = sum(tracked.map((item) => item.plan));
+  const realToDate = sum(tracked.map((item) => item.real ?? 0));
+  const withReal = progress.filter((item) => item.realAccumulated !== null);
+  return {
+    trackedMonths: tracked.length,
+    planToDate,
+    realToDate,
+    difference: roundMoney(realToDate - planToDate),
+    lastRealAccumulated: withReal.length ? withReal[withReal.length - 1].realAccumulated : null,
+  };
+}

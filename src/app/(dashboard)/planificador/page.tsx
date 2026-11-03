@@ -3,17 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Banknote,
   Briefcase,
   CalendarRange,
   CreditCard,
+  Flag,
   Landmark,
   Loader2,
+  Pencil,
   PiggyBank,
   Receipt,
   RotateCcw,
   Save,
   ShoppingBag,
+  Target,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -21,11 +23,13 @@ import { useUid } from "@/lib/hooks/useAuth";
 import { monthInMexicoCity } from "@/lib/time/month";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
+  computeMonthProgress,
   computePlanMonths,
   evaluateFinancialCut,
   EXPENSE_GROUPS,
   LEGACY_EXPENSE_LINE_ID,
   summarizePlanYear,
+  summarizeProgress,
   type PlanDraft,
 } from "@/lib/planning/savings-plan";
 import {
@@ -48,8 +52,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatCard } from "@/components/ui/StatCard";
 import { PlanLineTable } from "@/components/planificador/PlanLineTable";
-import { PlanChart } from "@/components/planificador/PlanChart";
-import { CashFlowTable } from "@/components/planificador/CashFlowTable";
+import { ProgressChart } from "@/components/planificador/ProgressChart";
+import { MonthTimeline } from "@/components/planificador/MonthTimeline";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { CutValidation } from "@/components/planificador/CutValidation";
 import { MilestonesPanel } from "@/components/planificador/MilestonesPanel";
 import { GROUP_META, MONTH_LABELS, MONTH_NAMES } from "@/components/planificador/constants";
@@ -309,21 +315,26 @@ export default function PlanificadorPage() {
   }
 
   const cutAccountsTotal = cut ? cut.accounts.reduce((acc, account) => acc + account.amount, 0) : 0;
-  const startingPoint = plan.anchor ? plan.anchor.balance : plan.initialSavings;
-  const periodLabel = fromMonth > 0 ? `${MONTH_LABELS[fromMonth]}–Dic` : `${year}`;
-  const monthsInScope = visibleMonths.length || 1;
-  const avgPersonal = summary.expensesByGroup.PERSONAL / monthsInScope;
-  const avgBusiness = summary.expensesByGroup.BUSINESS / monthsInScope;
+  const periodLabel = fromMonth > 0 ? `${MONTH_LABELS[fromMonth]}–Dic` : `${plan.year}`;
   const carryOverDiffers =
     previousClosing !== null && !plan.anchor && Math.abs(previousClosing - plan.initialSavings) >= 1;
+  // Mes en curso dentro del año que estás viendo: -1 si el año aún no empieza, 12 si ya terminó.
+  const progressMonth =
+    plan.year === currentYear ? Number(currentMonth.slice(5, 7)) - 1 : plan.year < currentYear ? 12 : -1;
+  const progress = computeMonthProgress(plan, months, progressMonth);
+  const progressSummary = summarizeProgress(progress);
+  const thisMonth = progressMonth >= 0 && progressMonth < 12 ? months[progressMonth] : null;
+  const closing = months[11].accumulated;
+  const signedMoney = (value: number) => `${value >= 0 ? "+" : "−"}${formatCurrency(Math.abs(value))}`;
+  const tracked = progressSummary.trackedMonths;
 
   return (
     <div className="page-shell space-y-5 pb-28">
       <PageHeader
         icon={PiggyBank}
         tone="emerald"
-        title="Planificador financiero"
-        subtitle="Ingresos, gastos personales y del negocio, apartados y deudas, mes a mes"
+        title="Planificador"
+        subtitle="Tu ahorro mes a mes: lo que planeaste contra lo que de verdad pasó"
         actions={
           <>
             <SegmentedControl
@@ -361,107 +372,142 @@ export default function PlanificadorPage() {
         </div>
       ) : null}
 
-      {cut && plan.anchor ? (
-        <div className="surface flex flex-wrap items-center justify-between gap-4 px-4 py-3.5 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-300">
-              <Landmark className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-zinc-100">{cut.label}</p>
-              <p className="text-xs text-zinc-400">
-                {cut.accounts.map((account) => `${account.name} ${formatCurrency(account.amount)}`).join(" · ")} ·{" "}
-                <span className="font-semibold text-amber-200">Total {formatCurrency(cutAccountsTotal)}</span>
-              </p>
-            </div>
-          </div>
-          <SegmentedControl
-            ariaLabel="Meses visibles"
-            size="sm"
-            options={[
-              { value: "cut" as Range, label: `Desde ${MONTH_NAMES[plan.anchor.month]}` },
-              { value: "year" as Range, label: "Todo el año" },
-            ]}
-            value={range}
-            onChange={setRange}
-          />
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
-          label={plan.anchor ? "Dinero real al corte" : "Saldo inicial del año"}
-          icon={Wallet}
-          tone="amber"
-          value={
-            plan.anchor ? (
-              formatCurrency(startingPoint)
-            ) : (
-              <input
-                type="number"
-                inputMode="decimal"
-                aria-label="Saldo inicial del año"
-                value={plan.initialSavings || ""}
-                placeholder="0"
-                onChange={(event) => update((draft) => ({ ...draft, initialSavings: Number(event.target.value) || 0 }))}
-                className="w-full rounded-md bg-transparent font-mono text-[22px] font-bold text-amber-300 outline-none hover:bg-white/[0.04] focus:bg-white/[0.06]"
-              />
-            )
+          label={!tracked ? "Avance contra el plan" : progressSummary.difference >= 0 ? "Vas arriba del plan" : "Vas abajo del plan"}
+          icon={Target}
+          tone={!tracked ? "default" : progressSummary.difference >= 0 ? "emerald" : "rose"}
+          value={tracked ? signedMoney(progressSummary.difference) : "—"}
+          hint={
+            tracked
+              ? `Ahorraste ${formatCurrency(progressSummary.realToDate)} de ${formatCurrency(progressSummary.planToDate)} planeados (${tracked} ${tracked === 1 ? "mes" : "meses"})`
+              : "Escribe tu ahorro real en la lista de meses"
           }
+        />
+        <StatCard
+          label={thisMonth ? `Este mes · ${MONTH_NAMES[thisMonth.month]}` : `Ahorro planeado ${plan.year}`}
+          icon={CalendarRange}
+          tone={thisMonth && thisMonth.net < 0 ? "rose" : "sky"}
+          value={formatCurrency(thisMonth ? thisMonth.net : progress.reduce((acc, item) => acc + item.plan, 0))}
+          hint={
+            thisMonth
+              ? `Entran ${formatCurrency(thisMonth.income)} · salen ${formatCurrency(thisMonth.spend)}`
+              : "Ingresos menos gastos de todo el año"
+          }
+        />
+        <StatCard
+          label={`Cierre de ${plan.year}`}
+          icon={Wallet}
+          tone={closing < 0 ? "rose" : "amber"}
+          value={formatCurrency(closing)}
           hint={
             plan.anchor
-              ? `Corte del ${plan.anchor.date}`
-              : carryOverDiffers
-                ? (
-                    <button
-                      type="button"
-                      className="text-left text-amber-300 underline-offset-2 hover:underline"
-                      onClick={() => update((draft) => ({ ...draft, initialSavings: previousClosing ?? 0 }))}
-                    >
-                      Usar cierre proyectado de {year - 1}: {formatCurrency(previousClosing ?? 0)}
-                    </button>
-                  )
-                : "Capital disponible al iniciar el año"
+              ? `Parte de ${formatCurrency(plan.anchor.balance)} reales al ${plan.anchor.date}`
+              : `Parte de ${formatCurrency(plan.initialSavings)} al iniciar el año`
           }
-        />
-        <StatCard
-          label={`Cierre proyectado ${year}`}
-          icon={TrendingUp}
-          tone={summary.closing < 0 ? "rose" : "emerald"}
-          value={formatCurrency(summary.closing)}
-          hint={`${formatCurrency(months[11].reservedAccumulated)} apartados · mínimo ${formatCurrency(summary.lowestBalance.value)} en ${MONTH_LABELS[summary.lowestBalance.month]}`}
-        />
-        <StatCard
-          label={`Dinero libre · ${periodLabel}`}
-          icon={Banknote}
-          tone={summary.free < 0 ? "rose" : "sky"}
-          value={formatCurrency(summary.free)}
-          hint={
-            summary.negativeFreeMonths.length
-              ? `En rojo: ${summary.negativeFreeMonths.map((m) => MONTH_LABELS[m]).join(", ")}`
-              : "Ningún mes en rojo"
-          }
-        />
-        <StatCard
-          label="Gasto mensual promedio"
-          icon={CalendarRange}
-          tone="violet"
-          value={formatCurrency(avgPersonal + avgBusiness)}
-          hint={`Personal ${formatCurrency(avgPersonal)} · Negocio ${formatCurrency(avgBusiness)}`}
         />
       </div>
 
       <section className="surface p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-zinc-100">Proyección {periodLabel}</h2>
-          <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-400/80" />Libre del mes</span>
-            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-amber-400" />Dinero total</span>
-            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 border-t border-dashed border-sky-400" />Apartado</span>
+          <h2 className="text-sm font-bold text-zinc-100">Ahorro planeado vs. real</h2>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-400">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-zinc-600" />Plan del mes</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />Real del mes</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-amber-400" />Acumulado plan</span>
+            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-sky-400" />Acumulado real</span>
           </div>
         </div>
-        <PlanChart months={months} visibleMonths={visibleMonths} />
+        <ProgressChart progress={progress} />
       </section>
+
+      <MonthTimeline
+        progress={progress}
+        months={months}
+        onRealChange={(month, value) =>
+          update((draft) => {
+            const actualSavingsValues = [...draft.actualSavingsValues];
+            actualSavingsValues[month] = value;
+            return { ...draft, actualSavingsValues };
+          })
+        }
+      />
+
+      <section className="surface p-4 sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-zinc-100">Totales {periodLabel}</h2>
+          {plan.anchor ? (
+            <SegmentedControl
+              ariaLabel="Periodo de los totales"
+              size="sm"
+              options={[
+                { value: "cut" as Range, label: `Desde ${MONTH_NAMES[plan.anchor.month]}` },
+                { value: "year" as Range, label: "Todo el año" },
+              ]}
+              value={range}
+              onChange={setRange}
+            />
+          ) : null}
+        </div>
+        <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: "Ingresos", value: summary.income, tone: "text-emerald-300", hint: `Personal ${formatCurrency(summary.incomeByContext.PERSONAL)} · Negocio ${formatCurrency(summary.incomeByContext.BUSINESS)}` },
+            { label: "Gastos", value: summary.spend, tone: "text-rose-300", hint: `Personal ${formatCurrency(summary.expensesByGroup.PERSONAL)} · Negocio ${formatCurrency(summary.expensesByGroup.BUSINESS)}` },
+            { label: "Apartado", value: summary.reserved, tone: "text-sky-300", hint: "Ahorro con nombre (sigue siendo tuyo)" },
+            {
+              label: "Libre",
+              value: summary.free,
+              tone: summary.free < 0 ? "text-rose-300" : "text-zinc-100",
+              hint: summary.negativeFreeMonths.length
+                ? `En rojo: ${summary.negativeFreeMonths.map((m) => MONTH_LABELS[m]).join(", ")}`
+                : "Ningún mes en rojo",
+            },
+          ].map((item) => (
+            <div key={item.label} className="surface-inset min-w-0 px-3.5 py-3">
+              <dt className="eyebrow">{item.label}</dt>
+              <dd className={cn("num mt-1 truncate font-mono text-lg font-bold", item.tone)}>{formatCurrency(item.value)}</dd>
+              <dd className="mt-0.5 text-[11px] leading-snug text-zinc-500">{item.hint}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <Disclosure
+        icon={Pencil}
+        title="Editar plan"
+        description="Ingresos, gastos y apartados que arman el plan de cada mes"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs text-zinc-400">
+          {plan.anchor ? (
+            <p>
+              Desde {MONTH_NAMES[plan.anchor.month]} el plan parte de tu dinero real al corte:{" "}
+              <span className="font-semibold text-amber-200">{formatCurrency(plan.anchor.balance)}</span>
+            </p>
+          ) : (
+            <>
+              <label className="flex items-center gap-2">
+                Saldo al iniciar {plan.year}
+                <MoneyInput
+                  variant="field"
+                  value={plan.initialSavings}
+                  onChange={(value) => update((draft) => ({ ...draft, initialSavings: value }))}
+                  ariaLabel="Saldo inicial del año"
+                  placeholder="0"
+                  className="w-36"
+                />
+              </label>
+              {carryOverDiffers ? (
+                <button
+                  type="button"
+                  className="text-amber-300 underline-offset-2 hover:underline"
+                  onClick={() => update((draft) => ({ ...draft, initialSavings: previousClosing ?? 0 }))}
+                >
+                  Usar cierre proyectado de {plan.year - 1}: {formatCurrency(previousClosing ?? 0)}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
 
       <PlanLineTable
         title="Ingresos"
@@ -597,52 +643,57 @@ export default function PlanificadorPage() {
         emptyLabel="Sin apartados de ahorro."
       />
 
-      <CashFlowTable
-        months={months}
-        visibleMonths={visibleMonths}
-        actualSavings={plan.actualSavingsValues}
-        anchorMonth={anchorMonth}
-        onActualChange={(month, value) =>
-          update((draft) => {
-            const actualSavingsValues = [...draft.actualSavingsValues];
-            actualSavingsValues[month] = value;
-            return { ...draft, actualSavingsValues };
-          })
-        }
-      />
+      </Disclosure>
 
-      {cut && validation ? <CutValidation cut={cut} results={validation} /> : null}
+      {cut && validation ? (
+        <Disclosure
+          icon={Landmark}
+          title={cut.label}
+          description={`Validación del corte · total en cuentas ${formatCurrency(cutAccountsTotal)}`}
+        >
+          <p className="px-1 text-xs text-zinc-400">
+            {cut.accounts.map((account) => `${account.name} ${formatCurrency(account.amount)}`).join(" · ")}
+          </p>
+          <CutValidation cut={cut} results={validation} />
+        </Disclosure>
+      ) : null}
 
-      <MilestonesPanel
-        milestones={plan.milestones}
-        months={months}
-        onChange={(id, patch: Partial<PlanMilestone>) =>
-          update((draft) => ({
-            ...draft,
-            milestones: draft.milestones.map((item) => {
-              if (item.id !== id) return item;
-              const next = { ...item, ...patch };
-              if (next.endMonth < next.startMonth) next.endMonth = next.startMonth;
-              return next;
-            }),
-          }))
-        }
-        onAdd={() =>
-          update((draft) => ({
-            ...draft,
-            milestones: [
-              ...draft.milestones,
-              { id: crypto.randomUUID(), name: "Nuevo hito", amount: 0, startMonth: fromMonth, endMonth: 11 },
-            ],
-          }))
-        }
-        onRemove={(id) => {
-          const milestone = plan.milestones.find((item) => item.id === id);
-          if (milestone && confirmRemove(milestone.name)) {
-            update((draft) => ({ ...draft, milestones: draft.milestones.filter((item) => item.id !== id) }));
+      <Disclosure
+        icon={Flag}
+        title="Hitos"
+        description={plan.milestones.length ? `${plan.milestones.length} metas de dinero en ${plan.year}` : "Metas de dinero con fecha"}
+      >
+        <MilestonesPanel
+          milestones={plan.milestones}
+          months={months}
+          onChange={(id, patch: Partial<PlanMilestone>) =>
+            update((draft) => ({
+              ...draft,
+              milestones: draft.milestones.map((item) => {
+                if (item.id !== id) return item;
+                const next = { ...item, ...patch };
+                if (next.endMonth < next.startMonth) next.endMonth = next.startMonth;
+                return next;
+              }),
+            }))
           }
-        }}
-      />
+          onAdd={() =>
+            update((draft) => ({
+              ...draft,
+              milestones: [
+                ...draft.milestones,
+                { id: crypto.randomUUID(), name: "Nuevo hito", amount: 0, startMonth: fromMonth, endMonth: 11 },
+              ],
+            }))
+          }
+          onRemove={(id) => {
+            const milestone = plan.milestones.find((item) => item.id === id);
+            if (milestone && confirmRemove(milestone.name)) {
+              update((draft) => ({ ...draft, milestones: draft.milestones.filter((item) => item.id !== id) }));
+            }
+          }}
+        />
+      </Disclosure>
 
       {dirty ? (
         <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 lg:pl-[264px]">
