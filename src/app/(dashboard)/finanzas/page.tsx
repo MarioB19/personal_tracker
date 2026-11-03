@@ -284,6 +284,8 @@ export default function FinanzasPage() {
   const [infoproductOps, setInfoproductOps] = useState<InfoproductOp[]>([]);
   const [infoproductFixedExpenses, setInfoproductFixedExpenses] = useState<InfoproductFixedExpense[]>([]);
   const [initialSavings, setInitialSavings] = useState<number>(0);
+  /** Dinero real al corte financiero: desde ese mes el ahorro parte de ahí. */
+  const [savingsAnchor, setSavingsAnchor] = useState<{ month: number; balance: number } | null>(null);
   const [plannedMonth, setPlannedMonth] = useState<PlanMonth | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -380,6 +382,7 @@ export default function FinanzasPage() {
       const data = loadedPlan.plan;
       const initial = data.initialSavings || 0;
       setInitialSavings(initial);
+      setSavingsAnchor(data.anchor ? { month: data.anchor.month, balance: data.anchor.balance } : null);
       const acts = data.actualSavingsValues;
       const plannedMonths = computePlanMonths(data);
       setPlannedMonth(plannedMonths[Number(monthInMexicoCity().slice(5, 7)) - 1] ?? null);
@@ -529,7 +532,11 @@ export default function FinanzasPage() {
     .filter((d) => d.status === "ACTIVE")
     .reduce((s, d) => s + d.currentBalance, 0);
 
-  const totalSaved = initialSavings + savings.reduce((s, sv) => s + sv.actualAmount, 0);
+  // Igual que el Planificador: con corte, el ahorro parte del dinero real al corte
+  // y solo suma lo registrado desde ese mes; sin corte, del saldo inicial del año.
+  const totalSaved = savingsAnchor
+    ? savingsAnchor.balance + savings.slice(savingsAnchor.month).reduce((s, sv) => s + sv.actualAmount, 0)
+    : initialSavings + savings.reduce((s, sv) => s + sv.actualAmount, 0);
 
   const avgCostPerHour =
     monthlyIncomesList.length > 0
@@ -1328,14 +1335,18 @@ export default function FinanzasPage() {
               label="Gastos"
               value={formatCurrency(totalExpenses)}
               sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""} registrados` : "Sin gastos registrados"}
-              plan={plannedMonth ? { recorded: totalExpenses, planned: plannedMonth.expensesByContext.PERSONAL, noun: "planeados" } : undefined}
+              plan={plannedMonth ? { recorded: totalExpenses, planned: plannedMonth.expensesByGroup.PERSONAL, noun: "planeados" } : undefined}
               color="red"
             />
             <StatCard
               icon={Wallet}
               label="Balance"
               value={formatCurrency(netBalance)}
-              sub={`Tasa de Ahorro: ${savingsRate}%`}
+              sub={
+                plannedMonth
+                  ? `Tasa ${savingsRate}% · con negocio y deudas el plan deja ${formatCurrency(plannedMonth.net)}`
+                  : `Tasa de Ahorro: ${savingsRate}%`
+              }
               color={netBalance >= 0 ? "amber" : "red"}
             />
             <StatCard
@@ -1684,14 +1695,14 @@ export default function FinanzasPage() {
       {/* ══════════════════════════════════════
           TAB: GASTOS
       ══════════════════════════════════════ */}
-      {activeTab === "gastos" && financialContext === "PERSONAL" && plannedMonth && plannedMonth.expensesByContext.PERSONAL > totalExpenses ? (
+      {activeTab === "gastos" && financialContext === "PERSONAL" && plannedMonth && plannedMonth.expensesByGroup.PERSONAL > totalExpenses ? (
         <div className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-zinc-100">
-              Llevas {formatCurrency(totalExpenses)} registrados de {formatCurrency(plannedMonth.expensesByContext.PERSONAL)} que planeaste este mes
+              Llevas {formatCurrency(totalExpenses)} registrados de {formatCurrency(plannedMonth.expensesByGroup.PERSONAL)} de gastos personales que planeaste este mes
             </p>
             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              Aquí solo cuentan los gastos que capturas. Los recurrentes se suman solos; lo variable (comidas, salidas, transporte) y los pagos a meses aparecen cuando los registras.
+              Aquí solo entran tus gastos personales del mes. Los recurrentes se suman solos; lo que captures una sola vez cuenta solo en su mes. Deudas, gastos puntuales y gastos del negocio se ven en el Planificador.
             </p>
           </div>
           <Link href="/planificador" className="btn-secondary shrink-0 px-3 py-2 text-xs">
