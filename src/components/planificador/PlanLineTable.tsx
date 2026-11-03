@@ -105,11 +105,58 @@ export function PlanLineTable<T extends EditableLine>({
       {lines.length === 0 ? (
         <p className="px-5 py-6 text-sm text-zinc-500">{emptyLabel}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Móvil: una tarjeta por concepto con sus meses en rejilla */}
+        <ul className="divide-y divide-white/[0.05] sm:hidden">
+          {lines.map((line) => (
+            <li key={line.id} className="px-3 py-3">
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={line.name}
+                  onChange={(event) => onChange(line.id, { name: event.target.value } as Partial<T>)}
+                  aria-label="Nombre del concepto"
+                  className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-1.5 text-sm font-semibold text-zinc-100 outline-none focus:bg-white/[0.06]"
+                />
+                {renderTag ? renderTag(line) : null}
+                <button
+                  type="button"
+                  onClick={() => onRemove(line.id)}
+                  aria-label={`Quitar ${line.name}`}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-500 transition hover:bg-rose-500/10 hover:text-rose-300"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <div className={cn("mt-2 grid gap-2", visibleMonths.length <= 2 ? "grid-cols-2" : "grid-cols-3")}>
+                {visibleMonths.map((month) => (
+                  <label key={month} className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-black/20 pl-2">
+                    <span className="w-8 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">{MONTH_LABELS[month]}</span>
+                    <MoneyInput
+                      value={line.values[month] ?? 0}
+                      onChange={(value) => setValue(line, month, value)}
+                      ariaLabel={`${line.name} — ${MONTH_LABELS[month]}`}
+                      className={cn("h-8 px-1", valueTone)}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center justify-between px-1 text-xs">
+                <span className="text-zinc-500">Total</span>
+                <span className="num font-mono font-semibold text-zinc-200">{formatCurrency(lineTotal(line))}</span>
+              </div>
+            </li>
+          ))}
+          <li className="flex items-center justify-between bg-white/[0.02] px-4 py-2.5 text-sm font-bold text-zinc-200">
+            <span>Subtotal</span>
+            <span className="num font-mono">{formatCurrency(sectionTotal)}</span>
+          </li>
+        </ul>
+
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full min-w-max border-collapse text-sm">
             <thead>
               <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                <th scope="col" className="sticky left-0 z-10 min-w-[190px] bg-[#0b0b0d] px-4 py-2.5 sm:min-w-[280px]">
+                <th scope="col" className="sticky left-0 z-10 min-w-[168px] bg-[#0b0b0d] px-3 py-2.5 sm:min-w-[280px] sm:px-4">
                   Concepto
                 </th>
                 {visibleMonths.map((month) => (
@@ -123,7 +170,7 @@ export function PlanLineTable<T extends EditableLine>({
             <tbody>
               {lines.map((line) => (
                 <tr key={line.id} className="group border-t border-white/[0.04] hover:bg-white/[0.015]">
-                  <th scope="row" className="sticky left-0 z-10 bg-[#0b0b0d] px-3 py-1 font-normal group-hover:bg-[#0e0e10]">
+                  <th scope="row" className="sticky left-0 z-10 bg-[#0b0b0d] px-2 py-1 font-normal group-hover:bg-[#0e0e10] sm:px-3">
                     <div className="flex items-center gap-1.5">
                       <input
                         value={line.name}
@@ -137,7 +184,7 @@ export function PlanLineTable<T extends EditableLine>({
                           aria-label="Mover a otra sección"
                           value=""
                           onChange={(event) => event.target.value && onMove(line.id, event.target.value)}
-                          className="w-6 shrink-0 cursor-pointer appearance-none rounded-md bg-transparent text-center text-xs text-zinc-500 opacity-60 outline-none hover:bg-white/[0.06] hover:opacity-100 focus:opacity-100"
+                          className="hidden w-6 shrink-0 cursor-pointer appearance-none rounded-md bg-transparent text-center text-xs text-zinc-500 opacity-60 outline-none hover:bg-white/[0.06] hover:opacity-100 focus:opacity-100 sm:block"
                           title="Mover a otra sección"
                         >
                           <option value="">⇄</option>
@@ -153,7 +200,7 @@ export function PlanLineTable<T extends EditableLine>({
                         onClick={() => repeatForward(line)}
                         title={`Repetir ${MONTH_LABELS[visibleMonths[0] ?? 0]} en los meses siguientes`}
                         aria-label="Repetir el primer mes visible en los siguientes"
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-60 transition hover:bg-white/[0.06] hover:text-amber-300 hover:opacity-100 focus:opacity-100"
+                        className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 opacity-60 transition hover:bg-white/[0.06] hover:text-amber-300 hover:opacity-100 focus:opacity-100 sm:flex"
                       >
                         <ArrowRightToLine className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
@@ -199,6 +246,7 @@ export function PlanLineTable<T extends EditableLine>({
             </tfoot>
           </table>
         </div>
+        </>
       )}
     </section>
   );

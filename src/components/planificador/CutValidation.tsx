@@ -46,7 +46,32 @@ export function CutValidation({ cut, results }: { cut: FinancialCut; results: Cu
             ))}
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <ul className="divide-y divide-white/[0.04] sm:hidden">
+        {results.map((item) => {
+          const meta = STATUS_META[item.status];
+          const Icon = meta.icon;
+          return (
+            <li key={item.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm text-zinc-200">{item.label}</p>
+                <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold", meta.className)}>
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {meta.label}
+                </span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
+                <span className="text-zinc-500">Escrito {formatCurrency(item.declared)}</span>
+                <span className="font-semibold text-zinc-100">Calculado {formatCurrency(item.computed)}</span>
+                {item.status !== "OK" ? (
+                  <span className={item.difference < 0 ? "text-rose-300" : "text-amber-300"}>{signed(item.difference)}</span>
+                ) : null}
+              </div>
+              {item.note ? <p className="mt-1 text-xs text-zinc-500">{item.note}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
