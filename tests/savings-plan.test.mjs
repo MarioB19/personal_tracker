@@ -197,3 +197,20 @@ test("cut checks compare declared totals with their line items", () => {
   assert.equal(results.missing.status, "MISSING");
   assert.deepEqual(results.missing.missing, ["2027:nope"]);
 });
+
+test("malformed cut terms are dropped instead of crashing the planner", () => {
+  const cut = normalizeFinancialCut(
+    {
+      accounts: [{ name: "Nu", amount: 10 }],
+      checks: [
+        { id: "a", label: "A", declared: 5, terms: [{ kind: "line", year: 2026, lineId: "x" }, { kind: "accounts" }, null, { kind: "nope" }] },
+        { id: "b", label: "B", declared: 1, terms: "bad" },
+      ],
+    },
+    "c",
+  );
+  assert.equal(cut.checks.length, 1);
+  assert.deepEqual(cut.checks[0].terms, [{ kind: "accounts", sign: 1 }]);
+  const [result] = evaluateFinancialCut(cut, {});
+  assert.equal(result.computed, 10);
+});

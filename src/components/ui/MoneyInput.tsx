@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const GROUPED = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 });
@@ -32,6 +32,7 @@ export function MoneyInput({
   variant?: "cell" | "field";
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const valueOnFocus = useRef(value);
   const display = draft ?? (value ? GROUPED.format(value) : "");
 
   return (
@@ -43,6 +44,7 @@ export function MoneyInput({
       placeholder={placeholder}
       value={display}
       onFocus={(event) => {
+        valueOnFocus.current = value;
         setDraft(value ? String(value) : "");
         requestAnimationFrame(() => event.target.select());
       }}
@@ -55,6 +57,7 @@ export function MoneyInput({
       onKeyDown={(event) => {
         if (event.key === "Enter") (event.target as HTMLInputElement).blur();
         if (event.key === "Escape") {
+          if (value !== valueOnFocus.current) onChange(valueOnFocus.current);
           setDraft(null);
           (event.target as HTMLInputElement).blur();
         }

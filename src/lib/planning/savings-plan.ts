@@ -2,6 +2,7 @@ import type {
   FinancialContext,
   FinancialCut,
   FinancialCutCheck,
+  FinancialCutTerm,
   IncomeSourcePlan,
   PlanAnchor,
   PlanExpenseGroup,
@@ -490,9 +491,39 @@ export function normalizeFinancialCut(
       amount: roundMoney(item?.amount),
     }),
   );
-  const checks = (Array.isArray(raw.checks) ? raw.checks : []).filter(
-    (item): item is FinancialCutCheck =>
-      Boolean(item) && typeof item === "object" && Array.isArray((item as FinancialCutCheck).terms),
+  const checks = (Array.isArray(raw.checks) ? raw.checks : []).flatMap(
+    (item: Record<string, unknown>): FinancialCutCheck[] => {
+      if (!item || typeof item !== "object" || !Array.isArray(item.terms)) return [];
+      const terms = item.terms.flatMap((term: Record<string, unknown>): FinancialCutTerm[] => {
+        const sign = term?.sign === -1 ? -1 : 1;
+        if (term?.kind === "accounts") return [{ kind: "accounts", sign }];
+        if (term?.kind === "constant" && Number.isFinite(Number(term.value))) {
+          return [{ kind: "constant", value: Number(term.value), label: String(term.label ?? ""), sign }];
+        }
+        if (
+          term?.kind === "line" &&
+          Number.isInteger(term.year) &&
+          typeof term.lineId === "string" &&
+          Array.isArray(term.months)
+        ) {
+          const months = term.months.filter(
+            (month: unknown): month is number => Number.isInteger(month) && (month as number) >= 0 && (month as number) < PLAN_MONTHS,
+          );
+          return [{ kind: "line", year: term.year as number, lineId: term.lineId, months, sign }];
+        }
+        return [];
+      });
+      return [
+        {
+          id: lineId(item.id, `check-${terms.length}`),
+          label: cleanText(item.label, "Validación"),
+          declared: roundMoney(item.declared),
+          terms,
+          ...(item.severity === "WARNING" ? { severity: "WARNING" as const } : {}),
+          ...(typeof item.note === "string" && item.note.trim() ? { note: item.note.trim() } : {}),
+        },
+      ];
+    },
   );
   return {
     id,

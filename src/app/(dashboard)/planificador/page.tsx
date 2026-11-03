@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -122,10 +122,15 @@ export default function PlanificadorPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [range, setRange] = useState<Range>("year");
+  /** Cuenta ediciones para no perder las que ocurren mientras se guarda. */
+  const editVersion = useRef(0);
+  /** Ignora cargas viejas si cambias de año antes de que terminen. */
+  const loadSequence = useRef(0);
 
   const load = useCallback(
     async (targetYear: number) => {
       if (!uid) return;
+      const sequence = ++loadSequence.current;
       setLoading(true);
       setError(null);
       try {
@@ -138,6 +143,7 @@ export default function PlanificadorPage() {
             return null;
           }),
         ]);
+        if (sequence !== loadSequence.current) return;
         setDocId(loaded.docId);
         setPlan(loaded.plan);
         setDirty(false);
@@ -154,15 +160,18 @@ export default function PlanificadorPage() {
             else if (y === targetYear - 1) plans[y] = previous.plan;
             else plans[y] = (await loadSavingsPlan(uid, y)).plan;
           }
+          if (sequence !== loadSequence.current) return;
           setCutPlans(plans);
         } else {
           setCutPlans({});
         }
       } catch (caught) {
         console.error(caught);
-        setError("No se pudo cargar el plan. Revisa tu conexión e inténtalo de nuevo.");
+        if (sequence === loadSequence.current) {
+          setError("No se pudo cargar el plan. Revisa tu conexión e inténtalo de nuevo.");
+        }
       } finally {
-        setLoading(false);
+        if (sequence === loadSequence.current) setLoading(false);
       }
     },
     [uid],
@@ -182,6 +191,7 @@ export default function PlanificadorPage() {
   }, [dirty]);
 
   const update = useCallback((mutate: (draft: PlanDraft) => PlanDraft) => {
+    editVersion.current += 1;
     setPlan((current) => (current ? mutate(current) : current));
     setDirty(true);
     setSavedAt(null);
@@ -205,28 +215,59 @@ export default function PlanificadorPage() {
   }, [cut, cutPlans, plan]);
 
   const handleSave = async () => {
-    if (!uid || !plan) return;
+    if (!uid || !plan || saving) return;
+    const snapshot = plan;
+    const snapshotDocId = docId;
+    const startedAt = editVersion.current;
     setSaving(true);
     setError(null);
     try {
-      const revision = await saveSavingsPlan(uid, docId, plan);
-      setPlan({ ...plan, revision });
-      setCutPlans((current) => (plan.year in current ? { ...current, [plan.year]: { ...plan, revision } } : current));
-      setDirty(false);
-      setSavedAt(new Date());
+      const revision = await saveSavingsPlan(uid, snapshotDocId, snapshot);
+      // Conserva lo que se haya tecleado durante el guardado.
+      setPlan((current) => (current && current.year === snapshot.year ? { ...current, revision } : current));
+      setCutPlans((current) => (snapshot.year in current ? { ...current, [snapshot.year]: { ...snapshot, revision } } : current));
+      if (editVersion.current === startedAt) {
+        setDirty(false);
+        setSavedAt(new Date());
+      }
     } catch (caught) {
       console.error(caught);
-      setError(
-        caught instanceof SavingsPlanConflictError
-          ? caught.message
-          : "No se pudo guardar el plan. Tus cambios siguen en pantalla.",
-      );
+      if (caught instanceof SavingsPlanConflictError) {
+        // Otro guardado (p. ej. ahorro real o hitos desde Finanzas) avanzó la
+        // revisión: conserva tus líneas y toma lo más reciente del servidor.
+        try {
+          const latest = await loadSavingsPlan(uid, snapshot.year);
+          setPlan((current) =>
+            current && current.year === snapshot.year
+              ? {
+                  ...current,
+                  revision: latest.plan.revision,
+                  actualSavingsValues: latest.plan.actualSavingsValues,
+                  milestones: latest.plan.milestones,
+                }
+              : current,
+          );
+          setError(
+            "El plan se actualizó en otra pestaña o desde Finanzas. Conservamos tus cambios y tomamos el ahorro real y los hitos más recientes: revisa y guarda de nuevo.",
+          );
+        } catch {
+          setError(caught.message);
+        }
+      } else {
+        setError("No se pudo guardar el plan. Tus cambios siguen en pantalla.");
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  const reload = () => {
+    if (dirty && !window.confirm("Tienes cambios sin guardar. ¿Recargar y descartarlos?")) return;
+    load(year);
+  };
+
   const changeYear = (next: number) => {
+    if (saving) return;
     if (dirty && !window.confirm("Tienes cambios sin guardar. ¿Cambiar de año y descartarlos?")) return;
     setYear(next);
   };
@@ -284,7 +325,7 @@ export default function PlanificadorPage() {
           <>
             <SegmentedControl
               ariaLabel="Año del plan"
-              options={years.map((value) => ({ value, label: value }))}
+              options={years.map((value) => ({ value, label: value, disabled: saving && value !== year }))}
               value={year}
               onChange={changeYear}
             />
@@ -311,7 +352,7 @@ export default function PlanificadorPage() {
             <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </span>
-          <button type="button" onClick={() => load(year)} className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline">
+          <button type="button" onClick={reload} className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline">
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Recargar
           </button>
         </div>
@@ -503,7 +544,12 @@ export default function PlanificadorPage() {
               value: target,
               label: GROUP_META[target].title.toLowerCase(),
             }))}
-            onMove={(id, target) => patchExpense(id, { group: target as PlanExpenseGroup })}
+            onMove={(id, target) =>
+              patchExpense(id, {
+                group: target as PlanExpenseGroup,
+                ...(target === "BUSINESS" ? { context: "BUSINESS" as const } : group === "BUSINESS" ? { context: "PERSONAL" as const } : {}),
+              })
+            }
             renderTag={
               group === "BUSINESS"
                 ? undefined
@@ -594,7 +640,7 @@ export default function PlanificadorPage() {
         <div className="fixed inset-x-0 bottom-4 z-30 flex justify-center px-4 lg:pl-[264px]">
           <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-[#0b0b0d]/95 px-4 py-2.5 shadow-2xl backdrop-blur">
             <span className="text-sm text-zinc-200">Cambios sin guardar</span>
-            <button type="button" onClick={() => load(year)} className="btn-ghost px-3 py-1.5 text-xs">
+            <button type="button" onClick={reload} className="btn-ghost px-3 py-1.5 text-xs">
               Descartar
             </button>
             <button type="button" onClick={handleSave} disabled={saving} className="btn-primary px-3 py-1.5 text-xs">

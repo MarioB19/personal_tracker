@@ -78,6 +78,9 @@ export async function saveSavingsPlan(
   const ref = doc(db, "savings_plans", docId);
   return runTransaction(db, async (transaction) => {
     const current = await transaction.get(ref);
+    if (current.exists() && Number(current.data().year) !== plan.year) {
+      throw new SavingsPlanConflictError();
+    }
     const currentRevision = current.exists()
       ? normalizeSavingsPlan(current.data(), plan.year).revision
       : 0;
