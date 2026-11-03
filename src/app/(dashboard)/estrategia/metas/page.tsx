@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, update, remove } from "@/lib/repositories/firestore";
@@ -180,7 +182,7 @@ function GoalCard({
           <div className="flex flex-wrap items-center gap-2 mb-2 select-none">
             <span
               className={cn(
-                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border",
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border",
                 area.bg,
                 area.text,
                 "border-white/5"
@@ -189,7 +191,7 @@ function GoalCard({
               <AreaIcon className="w-2.5 h-2.5" />
               {area.label}
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold text-zinc-500 bg-white/5 border border-white/[0.03] uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-zinc-500 bg-white/5 border border-white/[0.03] uppercase tracking-wider">
               {goal.horizon.replace("_", " ")}
             </span>
           </div>
@@ -315,7 +317,7 @@ function GoalCard({
       <div className="flex items-center justify-between mt-3 select-none">
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border",
+            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border",
             statusCfg.text,
             statusCfg.bg,
             statusCfg.border
@@ -489,18 +491,13 @@ export default function MetasPage() {
   return (
     <div className="page-enter space-y-6">
       
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2.5 tracking-tight">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/15 to-emerald-600/5 border border-emerald-500/15 flex items-center justify-center">
-              <Trophy className="w-4 h-4 text-emerald-400" />
-            </div>
-            Metas
-          </h1>
-          <p className="text-[12px] text-zinc-500 mt-1 ml-[42px]">
-            {goals.length} metas registradas
-          </p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={Trophy}
+          tone="emerald"
+          title="Metas"
+          subtitle={`${goals.length} ${goals.length === 1 ? "meta registrada" : "metas registradas"}`}
+        />
         <div className="flex items-center gap-2">
             <button
             onClick={() => { setShowForm(true); setEditing(null); }}
@@ -594,7 +591,7 @@ export default function MetasPage() {
                   >
                     {h === 'ALL' ? "TODOS" : h.replace("_", " ")}
                     <span className={cn(
-                      "text-[9px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
                       isActive ? "bg-amber-500/20 text-amber-300" : "bg-white/5 text-zinc-600"
                     )}>
                       {count}
@@ -644,7 +641,7 @@ export default function MetasPage() {
                   {s !== 'ALL' && <StatusIcon className="w-3.5 h-3.5 shrink-0" />}
                   {s === 'ALL' ? "TODOS" : (STATUS_CONFIG[s as GoalStatus]?.label || s)}
                   <span className={cn(
-                    "text-[9px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
+                    "text-[10px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
                     isActive ? countStyles : "bg-white/5 text-zinc-600"
                   )}>
                     {count}
@@ -693,7 +690,7 @@ export default function MetasPage() {
                   {a !== 'ALL' && <AreaIcon className="w-3.5 h-3.5 shrink-0" />}
                   {a === 'ALL' ? "TODAS" : (LIFE_AREA_CONFIG[a as LifeArea]?.label || a)}
                   <span className={cn(
-                    "text-[9px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
+                    "text-[10px] px-1.5 py-0.2 rounded-full font-extrabold select-none",
                     isActive ? countStyles : "bg-white/5 text-zinc-600"
                   )}>
                     {count}

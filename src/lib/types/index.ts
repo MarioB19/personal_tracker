@@ -290,23 +290,97 @@ export interface PlanMilestone {
   status?: "PENDING" | "REACHED";
 }
 
+/** RECURRING: ingreso habitual · EXTRA: bono/aguinaldo · RECEIVABLE: cobro pendiente de un mes anterior. */
+export type PlanIncomeKind = "RECURRING" | "EXTRA" | "RECEIVABLE";
+
 export interface IncomeSourcePlan {
   id: string;
   name: string;
   values: number[]; // 12 elements
+  context?: FinancialContext;
+  kind?: PlanIncomeKind;
+  notes?: string;
+}
+
+/** PERSONAL: gasto mensual personal · BUSINESS: operación del negocio · ONE_OFF: gasto puntual · DEBT: pago de deuda. */
+export type PlanExpenseGroup = "PERSONAL" | "BUSINESS" | "ONE_OFF" | "DEBT";
+
+export interface PlanExpenseLine {
+  id: string;
+  name: string;
+  group: PlanExpenseGroup;
+  context: FinancialContext;
+  values: number[]; // 12 elements
+  notes?: string;
+}
+
+/** Dinero que se aparta (fondo de ahorro): reduce el dinero libre, no el patrimonio. */
+export interface PlanSavingsLine {
+  id: string;
+  name: string;
+  values: number[]; // 12 elements
+  notes?: string;
+}
+
+/** Saldo real declarado en un corte; la proyección parte de él desde `month`. */
+export interface PlanAnchor {
+  cutId: string;
+  date: string; // YYYY-MM-DD
+  month: number; // 0-11
+  balance: number;
 }
 
 export interface SavingsPlanYear {
   id: string;
   userId: string;
   year: number;
+  schemaVersion?: 2;
+  revision?: number;
   initialSavings: number;
   incomeSources: IncomeSourcePlan[];
+  expenseLines?: PlanExpenseLine[];
+  savingsLines?: PlanSavingsLine[];
+  anchor?: PlanAnchor | null;
+  /** Total mensual derivado (gastos de todas las secciones); se conserva para lectores heredados. */
   expensesValues: number[]; // 12 elements
   actualSavingsValues?: number[]; // 12 elements (tracking of reality vs projection)
   milestones: PlanMilestone[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface FinancialCutAccount {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export type FinancialCutTerm =
+  | { kind: "line"; year: number; lineId: string; months: number[]; sign?: 1 | -1 }
+  | { kind: "accounts"; sign?: 1 | -1 }
+  | { kind: "constant"; value: number; label: string; sign?: 1 | -1 };
+
+export interface FinancialCutCheck {
+  id: string;
+  label: string;
+  declared: number;
+  terms: FinancialCutTerm[];
+  /** WARNING para supuestos (p. ej. capacidad de pauta); MISMATCH para totales que deberían cuadrar. */
+  severity?: "MISMATCH" | "WARNING";
+  note?: string;
+}
+
+export interface FinancialCut {
+  id: string;
+  userId: string;
+  date: string; // YYYY-MM-DD
+  label: string;
+  accounts: FinancialCutAccount[];
+  checks: FinancialCutCheck[];
+  notes: string[];
+  revision?: number;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 

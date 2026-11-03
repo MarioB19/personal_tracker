@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, remove, update } from "@/lib/repositories/firestore";
@@ -524,18 +526,13 @@ export default function RevisionesPage() {
   return (
     <div className="page-enter space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-            <div className="p-1.5 bg-amber-500/10 rounded-lg text-amber-400">
-              <ClipboardCheck className="w-5.5 h-5.5" />
-            </div>
-            Revisiones
-          </h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Mide tu progreso, ajusta tu rumbo y evalúa tus múltiples dimensiones.
-          </p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={ClipboardCheck}
+          tone="violet"
+          title="Revisiones"
+          subtitle="Mide tu progreso, ajusta el rumbo y evalúa tus dimensiones"
+        />
         <button
           onClick={() => setShowForm(!showForm)}
           className={cn(
@@ -678,7 +675,7 @@ export default function RevisionesPage() {
                 <span className="text-lg font-black text-amber-400 font-mono bg-amber-500/5 px-3 py-1 border border-amber-500/10 rounded-xl">
                   {calculatedLiveRating.toFixed(1)} ⭐
                 </span>
-                <span className="text-[9px] text-zinc-500 leading-snug max-w-[125px]">
+                <span className="text-[10px] text-zinc-500 leading-snug max-w-[125px]">
                   (50% Retro General + 50% Promedio Dimensiones)
                 </span>
               </div>
@@ -859,7 +856,7 @@ export default function RevisionesPage() {
 
                         {/* Stars selector with custom coloring */}
                         <div className="mb-4">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                          <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
                             Tu puntuación
                           </p>
                           <div className="flex gap-1.5">
@@ -882,7 +879,7 @@ export default function RevisionesPage() {
 
                         {/* Comment text box */}
                         <div className="group block">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                          <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
                             Reflexión / Notas
                           </p>
                           <textarea
@@ -1055,7 +1052,7 @@ export default function RevisionesPage() {
                           if (!active || !payload || !payload.length) return null;
                           return (
                             <div className="bg-zinc-950/95 border border-zinc-800/80 rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-md text-xs">
-                              <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2 text-[9px]">{label}</p>
+                              <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2 text-[10px]">{label}</p>
                               <div className="flex items-center gap-4 justify-between">
                                 <span className="text-zinc-400 font-medium flex items-center gap-1.5">
                                   <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /> Promedio General:
@@ -1116,7 +1113,7 @@ export default function RevisionesPage() {
                                 <h4 className="text-sm font-bold text-zinc-100 tracking-wide">
                                   {dim.label}
                                 </h4>
-                                <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">
+                                <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold">
                                   Este mes: <strong className="text-zinc-300 font-extrabold">{dim.currentVal.toFixed(1)}</strong>
                                 </span>
                               </div>
@@ -1142,7 +1139,7 @@ export default function RevisionesPage() {
                                 <span>{dim.diff > 0 ? "+" : ""}{dim.diff.toFixed(1)}</span>
                               </div>
                             ) : (
-                              <span className="text-[9px] font-bold text-zinc-600 bg-zinc-950 px-2 py-0.5 border border-zinc-900 rounded">
+                              <span className="text-[10px] font-bold text-zinc-600 bg-zinc-950 px-2 py-0.5 border border-zinc-900 rounded">
                                 MoM: —
                               </span>
                             )}
@@ -1168,7 +1165,7 @@ export default function RevisionesPage() {
 
                         {/* Prev vs Current footer values */}
                         {dim.prevVal !== null && (
-                          <div className="flex items-center justify-between text-[9px] text-zinc-500 font-mono mt-3.5 border-t border-white/[0.02] pt-2">
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono mt-3.5 border-t border-white/[0.02] pt-2">
                             <span>MES ANTERIOR: <strong className="text-zinc-400 font-extrabold">{dim.prevVal.toFixed(1)}</strong></span>
                             <span className="flex items-center gap-1">
                               {dim.prevVal.toFixed(1)} <ArrowRight className="w-2.5 h-2.5" /> {dim.currentVal.toFixed(1)}
@@ -1208,7 +1205,7 @@ export default function RevisionesPage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <span
                         className={cn(
-                          "text-[9px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded border",
+                          "text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded border",
                           getReviewTypeBadgeClass(r.type)
                         )}
                       >

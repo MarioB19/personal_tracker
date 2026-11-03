@@ -284,12 +284,12 @@ export function GoalSlideOver({
                             const qEndMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
                             d.setMonth(qEndMonth + 1, 0);
                             setTargetDate(d.toISOString().split("T")[0]);
-                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[9px] transition-colors border border-white/5">Fin Q actual</button>
+                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[10px] transition-colors border border-white/5">Fin Q actual</button>
                         <button onClick={() => {
                             const d = new Date();
                             d.setFullYear(d.getFullYear(), 11, 31);
                             setTargetDate(d.toISOString().split("T")[0]);
-                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[9px] transition-colors border border-white/5">Fin Año</button>
+                        }} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white rounded text-[10px] transition-colors border border-white/5">Fin Año</button>
                      </div>
                  </div>
                

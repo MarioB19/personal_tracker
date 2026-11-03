@@ -140,12 +140,12 @@ export default function VibeBusinessSnapshotCard({
               <h3 className="text-sm font-black uppercase tracking-wider text-white">
                 Resumen financiero de Vibe
               </h3>
-              <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-400">
+              <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-400">
                 Sincronizado · Solo lectura
               </span>
               <span
                 className={cn(
-                  "rounded-lg border px-2 py-1 text-[9px] font-black uppercase tracking-wider",
+                  "rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider",
                   qualityTone,
                 )}
               >
@@ -213,7 +213,7 @@ export default function VibeBusinessSnapshotCard({
             <span
               key={source.id}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider",
+                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider",
                 sourceTone(source.status),
               )}
             >

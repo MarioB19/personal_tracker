@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, getAllFinance } from "@/lib/repositories/firestore";
@@ -77,7 +79,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   if (!active || !payload) return null;
   return (
     <div className="bg-zinc-950/90 border border-zinc-800/80 rounded-2xl px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md text-xs">
-      <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2 text-[9px]">{label}</p>
+      <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2 text-[10px]">{label}</p>
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-3 justify-between py-0.5">
           <span className="text-zinc-400 font-medium">{p.name}:</span>
@@ -556,18 +558,13 @@ export default function AnaliticaPage() {
     <div className="page-enter space-y-6 pb-12">
       
       {/* ── HEADER & NAV HUD ──────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-3 tracking-tight">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-600/5 border border-amber-500/15 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.05)]">
-              <BarChart3 className="w-5 h-5 text-amber-400" />
-            </div>
-            Analítica Inteligente
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">
-            {isHistorical ? "Análisis Histórico Global" : `Reporte Mensual: ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}
-          </p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={BarChart3}
+          tone="sky"
+          title="Analítica"
+          subtitle={isHistorical ? "Histórico completo" : `Reporte de ${MONTH_NAMES[selectedMonth - 1].toLowerCase()} ${selectedYear}`}
+        />
 
         {/* View mode toggle: Monthly vs Historical */}
         <div className="flex items-center gap-3">
@@ -695,7 +692,7 @@ export default function AnaliticaPage() {
               <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">
                 Balance Financiero {isHistorical ? "Total" : "Mensual"}
               </p>
-              <div className="flex items-center gap-3 justify-between mt-3.5 text-[9px] font-black text-zinc-400 border-t border-white/[0.03] pt-2">
+              <div className="flex items-center gap-3 justify-between mt-3.5 text-[10px] font-black text-zinc-400 border-t border-white/[0.03] pt-2">
                 <span>TASA AHORRO: <span className="text-amber-400 font-mono">{savingsRate.toFixed(0)}%</span></span>
                 <span>PROM. DIARIO: <span className="text-zinc-200 font-mono">{formatCurrency(averageDailySpend)}</span></span>
               </div>
@@ -794,7 +791,7 @@ export default function AnaliticaPage() {
                           </div>
                           <div className="flex items-center gap-2 font-mono">
                             <span className="text-zinc-200 font-black">{formatCurrency(d.value)}</span>
-                            <span className="text-zinc-500 text-[9px] font-bold">({((d.value / totalExpenseValue) * 100).toFixed(0)}%)</span>
+                            <span className="text-zinc-500 text-[10px] font-bold">({((d.value / totalExpenseValue) * 100).toFixed(0)}%)</span>
                           </div>
                         </div>
                       ))}
@@ -817,7 +814,7 @@ export default function AnaliticaPage() {
                 <h2 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-emerald-400" /> Tendencia Financiera {selectedYear}
                 </h2>
-                <div className="flex gap-4 text-[9px] font-black uppercase text-zinc-500 select-none">
+                <div className="flex gap-4 text-[10px] font-black uppercase text-zinc-500 select-none">
                   <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Ingresos</span>
                   <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /> Gastos</span>
                 </div>
@@ -1053,7 +1050,7 @@ export default function AnaliticaPage() {
               <h2 className="text-xs uppercase font-extrabold tracking-widest text-zinc-400 flex items-center gap-2">
                 <Info className="w-4 h-4 text-emerald-400" /> Plan vs Realidad — Resumen Financiero
               </h2>
-              <span className="text-[9px] font-black uppercase text-zinc-500 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg font-mono">
+              <span className="text-[10px] font-black uppercase text-zinc-500 bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg font-mono">
                 {isHistorical ? "Acumulado Histórico" : `Detalle de ${MONTH_NAMES[selectedMonth - 1]}`}
               </span>
             </div>
@@ -1061,14 +1058,14 @@ export default function AnaliticaPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               
               <div className="p-4 rounded-xl bg-zinc-950/40 border border-white/[0.02]">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Ingresos Consolidados</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Ingresos Consolidados</span>
                 <p className="text-xl font-black font-mono text-emerald-400 mt-1">{formatCurrency(totalIncomeValue)}</p>
                 <div className="progress-bar bg-zinc-900 mt-3 h-1"><div className="progress-bar-fill bg-emerald-500" style={{ width: "100%" }} /></div>
-                <span className="text-[8px] text-zinc-600 mt-2 block font-mono">100% de capital neto de entrada</span>
+                <span className="text-[10px] text-zinc-600 mt-2 block font-mono">100% de capital neto de entrada</span>
               </div>
 
               <div className="p-4 rounded-xl bg-zinc-950/40 border border-white/[0.02]">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Consolidados</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Consolidados</span>
                 <p className="text-xl font-black font-mono text-rose-400 mt-1">{formatCurrency(totalExpenseValue)}</p>
                 <div className="progress-bar bg-zinc-900 mt-3 h-1">
                   <div 
@@ -1076,13 +1073,13 @@ export default function AnaliticaPage() {
                     style={{ width: `${Math.min(100, totalIncomeValue > 0 ? (totalExpenseValue / totalIncomeValue) * 100 : 0)}%` }} 
                   />
                 </div>
-                <span className="text-[8px] text-zinc-600 mt-2 block font-mono">
+                <span className="text-[10px] text-zinc-600 mt-2 block font-mono">
                   {totalIncomeValue > 0 ? ((totalExpenseValue / totalIncomeValue) * 100).toFixed(0) : 0}% de los ingresos totales
                 </span>
               </div>
 
               <div className="p-4 rounded-xl bg-zinc-950/40 border border-white/[0.02]">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Fijos Programados</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Fijos Programados</span>
                 <p className="text-xl font-black font-mono text-zinc-200 mt-1">
                   {formatCurrency(filteredExpenses.filter(e => e.type === "FIJO" || e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0))}
                 </p>
@@ -1092,13 +1089,13 @@ export default function AnaliticaPage() {
                     style={{ width: `${Math.min(100, totalExpenseValue > 0 ? (filteredExpenses.filter(e => e.type === "FIJO" || e.type === "SUSCRIPCION").reduce((s, e) => s + e.amount, 0) / totalExpenseValue) * 100 : 0)}%` }} 
                   />
                 </div>
-                <span className="text-[8px] text-zinc-600 mt-2 block font-mono">
+                <span className="text-[10px] text-zinc-600 mt-2 block font-mono">
                   Gastos constantes obligatorios
                 </span>
               </div>
 
               <div className="p-4 rounded-xl bg-zinc-950/40 border border-white/[0.02]">
-                <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Variables / Impulsivos</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Gastos Variables / Impulsivos</span>
                 <p className="text-xl font-black font-mono text-amber-500 mt-1">
                   {formatCurrency(filteredExpenses.filter(e => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0))}
                 </p>
@@ -1108,7 +1105,7 @@ export default function AnaliticaPage() {
                     style={{ width: `${Math.min(100, totalExpenseValue > 0 ? (filteredExpenses.filter(e => e.type === "VARIABLE").reduce((s, e) => s + e.amount, 0) / totalExpenseValue) * 100 : 0)}%` }} 
                   />
                 </div>
-                <span className="text-[8px] text-zinc-600 mt-2 block font-mono">
+                <span className="text-[10px] text-zinc-600 mt-2 block font-mono">
                   Gastos variables discrecionales
                 </span>
               </div>
@@ -1124,7 +1121,7 @@ export default function AnaliticaPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl bg-rose-500/[0.02] border border-rose-500/10 flex justify-between items-center">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-rose-400 tracking-wider">Deuda Consolidada Activa</span>
+                      <span className="text-[10px] uppercase font-bold text-rose-400 tracking-wider">Deuda Consolidada Activa</span>
                       <p className="text-xl font-black font-mono text-rose-400 mt-1">{formatCurrency(totalActiveDebt)}</p>
                     </div>
                     <span className="text-[10px] font-black uppercase text-rose-500 bg-rose-500/5 px-2.5 py-1 border border-rose-500/10 rounded-lg font-mono">
@@ -1133,7 +1130,7 @@ export default function AnaliticaPage() {
                   </div>
                   <div className="p-4 rounded-xl bg-orange-500/[0.02] border border-orange-500/10 flex justify-between items-center">
                     <div>
-                      <span className="text-[9px] uppercase font-bold text-orange-400 tracking-wider">Pago Mínimo Comprometido</span>
+                      <span className="text-[10px] uppercase font-bold text-orange-400 tracking-wider">Pago Mínimo Comprometido</span>
                       <p className="text-xl font-black font-mono text-orange-400 mt-1">{formatCurrency(totalMinPayment)}</p>
                     </div>
                     <span className="text-[10px] font-black uppercase text-orange-500 bg-orange-500/5 px-2.5 py-1 border border-orange-500/10 rounded-lg font-mono animate-pulse">
@@ -1150,7 +1147,7 @@ export default function AnaliticaPage() {
                       <div key={i} className="p-3.5 bg-zinc-950/40 border border-white/[0.03] rounded-xl flex flex-col justify-between hover:border-rose-500/10 transition-colors">
                         <div className="flex items-center justify-between gap-2 mb-2 select-none">
                           <span className="text-[10px] font-black text-zinc-300 truncate">{d.entity}</span>
-                          <span className="text-[8px] text-zinc-500 font-extrabold uppercase tracking-wider bg-white/5 px-1.5 py-0.5 rounded">{d.type}</span>
+                          <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider bg-white/5 px-1.5 py-0.5 rounded">{d.type}</span>
                         </div>
                         <div>
                           <p className="text-sm font-black text-zinc-100 font-mono tracking-tight">{formatCurrency(d.currentBalance)}</p>
@@ -1158,7 +1155,7 @@ export default function AnaliticaPage() {
                             <div className="progress-bar-fill bg-rose-500" style={{ width: `${debtPct}%` }} />
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-[8px] text-zinc-500 mt-2.5 font-mono uppercase tracking-wider">
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-2.5 font-mono uppercase tracking-wider">
                           <span>Mín: {formatCurrency(d.minimumPayment)}</span>
                           <span className="text-rose-400 font-black">{debtPct.toFixed(0)}%</span>
                         </div>

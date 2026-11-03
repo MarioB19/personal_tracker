@@ -17,7 +17,7 @@ export default async function DashboardLayout({
         <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-orange-600/[0.03] rounded-full blur-[140px]" />
       </div>
 
-      <div className="relative z-10 lg:grid lg:grid-cols-[296px_minmax(0,1fr)] lg:gap-4 lg:p-4">
+      <div className="relative z-10 lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-2 lg:p-4">
         {/* Sidebar / nav */}
         <div className="hidden lg:block">
           <div className="sticky top-4">
@@ -32,7 +32,7 @@ export default async function DashboardLayout({
 
         {/* Main content */}
         <main className="min-w-0 pt-16 lg:pt-0">
-          <div className="mx-auto max-w-5xl px-5 py-6 sm:px-8 lg:px-10 lg:py-10">
+          <div className="mx-auto w-full max-w-[1360px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             {children}
           </div>
         </main>

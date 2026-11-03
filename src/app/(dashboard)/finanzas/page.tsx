@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useUid } from "@/lib/hooks/useAuth";
 import {
@@ -12,7 +14,9 @@ import {
   removeFinance,
 } from "@/lib/repositories/firestore";
 import { db } from "@/lib/firebase/config";
-import { collection, query, where, getDocs, doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { loadSavingsPlan, patchSavingsPlanTracking } from "@/lib/repositories/savings-plans";
+import { computePlanMonths } from "@/lib/planning/savings-plan";
 import {
   Income,
   Expense,
@@ -363,35 +367,31 @@ export default function FinanzasPage() {
 
   const loadData = useCallback(async () => {
     if (!uid) return;
-    const q = query(collection(db, "savings_plans"), where("userId", "==", uid), where("year", "==", new Date().getFullYear()));
-    const snap = await getDocs(q);
+    const planYear = Number(monthInMexicoCity().slice(0, 4));
+    const loadedPlan = await loadSavingsPlan(uid, planYear);
 
     let synSavings: Saving[] = [];
     let synMilestones: Milestone[] = [];
 
-    if (!snap.empty) {
-      const spDoc = snap.docs[0];
-      const data = spDoc.data();
+    if (loadedPlan.exists) {
+      const spDocId = loadedPlan.docId;
+      const data = loadedPlan.plan;
       const initial = data.initialSavings || 0;
       setInitialSavings(initial);
-      const incs = data.incomeSources || [];
-      const exps = data.expensesValues || [];
-      const acts = data.actualSavingsValues || Array(12).fill(0);
-      
-      let acc = initial;
+      const acts = data.actualSavingsValues;
+      const plannedMonths = computePlanMonths(data);
+
       synSavings = Array.from({ length: 12 }).map((_, i) => {
-        const plannedIncome = incs.reduce((sum: number, source: any) => sum + (source.values[i] || 0), 0);
-        const plannedAmount = plannedIncome - (exps[i] || 0);
+        const plannedAmount = plannedMonths[i].net;
         const actualAmount = acts[i] || 0;
-        acc += plannedAmount;
 
         return {
-          id: `${spDoc.id}_${i}`,
+          id: `${spDocId}_${i}`,
           userId: uid,
           month: new Date(new Date().getFullYear(), i, 1).toLocaleDateString("es-MX", { month: "long" }).toUpperCase(),
           plannedAmount,
           actualAmount,
-          accumulatedAmount: acc,
+          accumulatedAmount: plannedMonths[i].accumulated,
           financialGoal: "",
           notes: "",
           createdAt: new Date() as any,
@@ -399,7 +399,7 @@ export default function FinanzasPage() {
         } as Saving;
       });
 
-      synMilestones = (data.milestones || []).map((ms: any) => {
+      synMilestones = data.milestones.map((ms) => {
         const prog = ms.amount > 0 ? Math.round(((ms.currentAmount || 0) / ms.amount) * 100) : 0;
         return {
           id: ms.id,
@@ -1010,18 +1010,13 @@ export default function FinanzasPage() {
 
   const saveSaving = async () => {
     if (!uid || !editingId) return;
-    const parts = editingId.split("_");
-    const mIdx = parseInt(parts.pop() || "0");
-    const docId = parts.join("_");
-
-    const ref = doc(db, "savings_plans", docId);
-    const snap = await getDoc(ref);
-    if(snap.exists()) {
-        const data = snap.data();
-        const acts = data.actualSavingsValues || Array(12).fill(0);
-        acts[mIdx] = Number(sActual) || 0;
-        await setDoc(ref, { actualSavingsValues: acts }, { merge: true });
-    }
+    const mIdx = parseInt(editingId.split("_").pop() || "0");
+    const actual = Number(sActual) || 0;
+    await patchSavingsPlanTracking(uid, Number(monthInMexicoCity().slice(0, 4)), (plan) => {
+        const acts = [...plan.actualSavingsValues];
+        acts[mIdx] = actual;
+        return { actualSavingsValues: acts };
+    });
     setSActual(""); setSPlanned(""); setSGoal("");
     closeModal();
     loadData();
@@ -1031,35 +1026,31 @@ export default function FinanzasPage() {
     if (!uid || !mName.trim()) return;
     const target = Number(mTarget) || 0;
     const current = Number(mCurrent) || 0;
-    const status = current >= target ? "REACHED" : "PENDING";
-    
-    const q = query(collection(db, "savings_plans"), where("userId", "==", uid), where("year", "==", new Date().getFullYear()));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-       const spDoc = snap.docs[0];
-       const data = spDoc.data();
-       let mList = data.milestones || [];
-       
+    const status: "PENDING" | "REACHED" = current >= target ? "REACHED" : "PENDING";
+
+    await patchSavingsPlanTracking(uid, Number(monthInMexicoCity().slice(0, 4)), (plan) => {
        if (editingId) {
-           mList = mList.map((m: any) => {
-               if(m.id === editingId) {
-                   return { ...m, name: mName, amount: target, currentAmount: current, status };
-               }
-               return m;
-           });
-       } else {
-           mList.push({
-               id: crypto.randomUUID(),
-               name: mName,
-               amount: target,
-               currentAmount: current,
-               status,
-               startMonth: 0,
-               endMonth: 11
-           });
+           return {
+             milestones: plan.milestones.map((m) =>
+               m.id === editingId ? { ...m, name: mName, amount: target, currentAmount: current, status } : m,
+             ),
+           };
        }
-       await setDoc(doc(db, "savings_plans", spDoc.id), { milestones: mList }, { merge: true });
-     }
+       return {
+         milestones: [
+           ...plan.milestones,
+           {
+             id: crypto.randomUUID(),
+             name: mName,
+             amount: target,
+             currentAmount: current,
+             status,
+             startMonth: 0,
+             endMonth: 11,
+           },
+         ],
+       };
+    });
     setMName(""); setMTarget(""); setMCurrent("");
     closeModal();
     loadData();
@@ -1166,14 +1157,10 @@ export default function FinanzasPage() {
     if (!uid) return;
     if (sub === "savings_plans") return;
     if (sub === "milestones") {
-        const q = query(collection(db, "savings_plans"), where("userId", "==", uid), where("year", "==", new Date().getFullYear()));
-        const snap = await getDocs(q);
-        if(!snap.empty) {
-            const data = snap.docs[0].data();
-            const nMiles = (data.milestones || []).filter((m:any) => m.id !== id);
-            await setDoc(doc(db, "savings_plans", snap.docs[0].id), { milestones: nMiles }, { merge: true });
-            loadData();
-        }
+        await patchSavingsPlanTracking(uid, Number(monthInMexicoCity().slice(0, 4)), (plan) => ({
+          milestones: plan.milestones.filter((m) => m.id !== id),
+        }));
+        loadData();
         return;
     }
     await removeFinance(uid, sub, id);
@@ -1241,22 +1228,17 @@ export default function FinanzasPage() {
     <div className="space-y-8 page-enter pb-10">
       
       {/* ── Page Header & Context Selector ─────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-              <Wallet className="w-5 h-5 text-black" />
-            </div>
-            Control Financiero {financialContext === "BUSINESS" ? "— Negocio" : "— Personal"}
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1 capitalize">
-            {new Date().toLocaleDateString("es-MX", {
-              month: "long",
-              year: "numeric",
-              timeZone: "America/Mexico_City",
-            })}
-          </p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={Wallet}
+          tone={financialContext === "BUSINESS" ? "violet" : "amber"}
+          title={financialContext === "BUSINESS" ? "Finanzas · Negocio" : "Finanzas · Personal"}
+          subtitle={new Date().toLocaleDateString("es-MX", {
+            month: "long",
+            year: "numeric",
+            timeZone: "America/Mexico_City",
+          })}
+        />
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap self-start md:self-auto">
@@ -1397,7 +1379,7 @@ export default function FinanzasPage() {
                       </p>
                     </div>
                     <div className="mt-5">
-                      <div className="flex justify-between text-[9px] text-zinc-500 mb-1 font-mono uppercase tracking-wider font-bold">
+                      <div className="flex justify-between text-[10px] text-zinc-500 mb-1 font-mono uppercase tracking-wider font-bold">
                         <span>Progreso de Salud</span>
                         <span>{savingsRate}% / 20%</span>
                       </div>
@@ -1472,7 +1454,7 @@ export default function FinanzasPage() {
                             <p className="text-xs font-bold text-zinc-200 tracking-tight">{m.name}</p>
                             <div className="flex items-center gap-2">
                               <span className={cn(
-                                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                                "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
                                 m.status === "REACHED"
                                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
                                   : "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -1537,7 +1519,7 @@ export default function FinanzasPage() {
                           </span>
                           <span
                             className={cn(
-                              "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                              "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
                               p.profit >= 0
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-red-500/10 text-red-400 border-red-500/20"
@@ -1600,7 +1582,7 @@ export default function FinanzasPage() {
                             <div className="flex items-center gap-3 mr-2 font-mono">
                               <span
                                 className={cn(
-                                  "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
+                                  "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
                                   (e.subscriptionStatus || "active") === "active"
                                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                     : "bg-red-500/10 text-red-400 border-red-500/20"
@@ -1726,7 +1708,7 @@ export default function FinanzasPage() {
                         {e.type === "SUSCRIPCION" && (
                           <span
                             className={cn(
-                              "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
+                              "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
                               (e.subscriptionStatus || "active") === "active"
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-red-500/10 text-red-400 border-red-500/20"
@@ -1736,7 +1718,7 @@ export default function FinanzasPage() {
                           </span>
                         )}
                         <span className={cn(
-                          "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
+                          "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0",
                           e.type === "FIJO" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                           e.type === "SUSCRIPCION" ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
                           "bg-zinc-800 text-zinc-400 border-white/5"
@@ -1809,7 +1791,7 @@ export default function FinanzasPage() {
                     right={
                       <div className="flex items-center gap-4 mr-2 font-mono">
                         {isDue && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-orange-500/10 border border-orange-500/20 text-orange-400 animate-pulse">
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-orange-500/10 border border-orange-500/20 text-orange-400 animate-pulse">
                             <AlertTriangle className="w-3 h-3" /> Pago Próximo
                           </span>
                         )}
@@ -1929,7 +1911,7 @@ export default function FinanzasPage() {
                       <p className="text-xs font-bold text-zinc-200 tracking-tight">{m.name}</p>
                       <div className="flex items-center gap-2">
                         <span className={cn(
-                          "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                          "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
                           m.status === "REACHED"
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
                             : "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -2023,7 +2005,7 @@ export default function FinanzasPage() {
                         </span>
                         <span
                           className={cn(
-                            "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
+                            "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border",
                             p.status === "active"
                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                               : p.status === "testing"
@@ -2049,15 +2031,15 @@ export default function FinanzasPage() {
 
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/[0.04] font-mono text-center">
                       <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Ingresos</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase">Ingresos</p>
                         <p className="text-xs font-black text-emerald-400 mt-0.5">{formatCurrency(pIncomes)}</p>
                       </div>
                       <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Gastos</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase">Gastos</p>
                         <p className="text-xs font-black text-red-400 mt-0.5">{formatCurrency(pExpenses)}</p>
                       </div>
                       <div className="bg-black/30 p-2 rounded-xl border border-white/[0.02]">
-                        <p className="text-[9px] font-bold text-zinc-500 uppercase">Utilidad</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase">Utilidad</p>
                         <p className={cn("text-xs font-black mt-0.5", pProfit >= 0 ? "text-amber-400" : "text-red-400")}>
                           {formatCurrency(pProfit)}
                         </p>
@@ -2388,7 +2370,7 @@ export default function FinanzasPage() {
                                 disabled={editingMonthlyIncome}
                                 onClick={() => setIType(t)}
                                 className={cn(
-                                  "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
+                                  "flex flex-col items-center justify-center py-2 rounded-lg border text-[10px] font-black transition-all transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
                                   isSelected 
                                     ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
                                     : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
@@ -2603,7 +2585,7 @@ export default function FinanzasPage() {
                             type="button"
                             onClick={() => setECat(c)}
                             className={cn(
-                              "flex flex-col items-center justify-center py-2.5 rounded-xl border text-[9px] font-black transition-all transform active:scale-95",
+                              "flex flex-col items-center justify-center py-2.5 rounded-xl border text-[10px] font-black transition-all transform active:scale-95",
                               isSelected 
                                 ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
                                 : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
