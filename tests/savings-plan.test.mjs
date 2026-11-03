@@ -259,3 +259,30 @@ test("a past month with nothing planned and nothing saved is not flagged", () =>
   assert.equal(progress[0].status, "EMPTY");
   assert.equal(progress[2].status, "MISSING");
 });
+
+test("earmarked money counts as reserved from the cut, not as free money", () => {
+  const plan = normalizeSavingsPlan(
+    {
+      initialSavings: 0,
+      incomeSources: [{ id: "s", name: "Sueldo", values: Array(12).fill(1_000) }],
+      savingsLines: [{ id: "f", name: "Fondo", values: Array(12).fill(100) }],
+      anchor: { cutId: "c", date: "2026-11-02", month: 10, balance: 120_000 },
+      earmarked: { label: " Fondo del coche ", amount: 120_000 },
+    },
+    2026,
+  );
+  assert.deepEqual(plan.earmarked, { label: "Fondo del coche", amount: 120_000 });
+  const months = computePlanMonths(plan);
+  assert.equal(months[9].reservedAccumulated, 1_000);
+  assert.equal(months[10].accumulated, 121_000);
+  assert.equal(months[10].reservedAccumulated, 120_100);
+  assert.equal(months[11].reservedAccumulated, 120_200);
+  assert.deepEqual(planToFirestoreData(plan, "brandon").earmarked, { label: "Fondo del coche", amount: 120_000 });
+});
+
+test("without a cut, earmarked money is reserved from january; zero or invalid is ignored", () => {
+  const plan = normalizeSavingsPlan({ initialSavings: 180_000, earmarked: { label: "Coche", amount: 120_000 } }, 2027);
+  assert.equal(computePlanMonths(plan)[0].reservedAccumulated, 120_000);
+  assert.equal(normalizeSavingsPlan({ earmarked: { label: "x", amount: 0 } }, 2027).earmarked, null);
+  assert.equal(normalizeSavingsPlan({ earmarked: "bad" }, 2027).earmarked, null);
+});

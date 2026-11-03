@@ -5,6 +5,7 @@ import type {
   FinancialCutTerm,
   IncomeSourcePlan,
   PlanAnchor,
+  PlanEarmark,
   PlanExpenseGroup,
   PlanExpenseLine,
   PlanIncomeKind,
@@ -32,6 +33,8 @@ export interface PlanDraft {
   expenseLines: PlanExpenseLine[];
   savingsLines: PlanSavingsLine[];
   anchor: PlanAnchor | null;
+  /** Del dinero inicial (o del corte), cuánto ya está apartado y para qué. */
+  earmarked: PlanEarmark | null;
   actualSavingsValues: number[];
   milestones: PlanMilestone[];
 }
@@ -191,6 +194,13 @@ export function normalizeSavingsPlan(
         }
       : null;
 
+  const earmarkRaw = data.earmarked as Record<string, unknown> | null | undefined;
+  const earmarkAmount = roundMoney(earmarkRaw?.amount);
+  const earmarked: PlanEarmark | null =
+    earmarkRaw && typeof earmarkRaw === "object" && earmarkAmount > 0
+      ? { label: cleanText(earmarkRaw.label, "Apartado"), amount: earmarkAmount }
+      : null;
+
   const milestones = (Array.isArray(data.milestones) ? data.milestones : []).map(
     (item: Record<string, unknown>, index: number): PlanMilestone => {
       const startMonth = clampMonth(item?.startMonth);
@@ -215,6 +225,7 @@ export function normalizeSavingsPlan(
     expenseLines,
     savingsLines,
     anchor,
+    earmarked,
     actualSavingsValues: normalizeMonthValues(data.actualSavingsValues),
     milestones,
   };
@@ -233,7 +244,8 @@ export function emptyGroupTotals(): Record<PlanExpenseGroup, number> {
 export function computePlanMonths(plan: PlanDraft): PlanMonth[] {
   const months: PlanMonth[] = [];
   let accumulated = plan.initialSavings;
-  let reservedAccumulated = 0;
+  // Lo apartado del dinero inicial cuenta desde el arranque (o desde el corte).
+  let reservedAccumulated = plan.anchor ? 0 : plan.earmarked?.amount ?? 0;
 
   for (let month = 0; month < PLAN_MONTHS; month += 1) {
     const incomeByContext: Record<FinancialContext, number> = {
@@ -270,6 +282,7 @@ export function computePlanMonths(plan: PlanDraft): PlanMonth[] {
     const anchored = plan.anchor !== null && month >= plan.anchor.month;
     if (plan.anchor && month === plan.anchor.month) {
       accumulated = plan.anchor.balance;
+      reservedAccumulated = plan.earmarked?.amount ?? 0;
     }
     accumulated = roundMoney(accumulated + net);
     reservedAccumulated = roundMoney(reservedAccumulated + reserved);
@@ -379,6 +392,9 @@ export function planToFirestoreData(plan: PlanDraft, userId: string) {
       ...(line.notes ? { notes: line.notes } : {}),
     })),
     anchor: plan.anchor,
+    earmarked: plan.earmarked
+      ? { label: plan.earmarked.label.trim() || "Apartado", amount: roundMoney(plan.earmarked.amount) }
+      : null,
     expensesValues: legacyExpensesValues(plan),
     actualSavingsValues: normalizeMonthValues(plan.actualSavingsValues),
     milestones: plan.milestones,

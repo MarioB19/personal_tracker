@@ -330,6 +330,12 @@ export interface PlanAnchor {
   balance: number;
 }
 
+/** Parte del dinero con que arranca el plan que ya tiene destino (p. ej. el fondo del coche). */
+export interface PlanEarmark {
+  label: string;
+  amount: number;
+}
+
 export interface SavingsPlanYear {
   id: string;
   userId: string;
@@ -341,6 +347,7 @@ export interface SavingsPlanYear {
   expenseLines?: PlanExpenseLine[];
   savingsLines?: PlanSavingsLine[];
   anchor?: PlanAnchor | null;
+  earmarked?: PlanEarmark | null;
   /** Total mensual derivado (gastos de todas las secciones); se conserva para lectores heredados. */
   expensesValues: number[]; // 12 elements
   actualSavingsValues?: number[]; // 12 elements (tracking of reality vs projection)
