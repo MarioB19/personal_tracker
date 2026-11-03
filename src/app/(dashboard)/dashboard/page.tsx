@@ -421,9 +421,9 @@ export default function DashboardPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`flex-1 flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-[18px] text-xs font-black transition-all duration-300 ${
+              className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 px-2 py-3 sm:gap-2.5 sm:px-4 sm:py-3.5 rounded-[18px] text-xs font-black transition-all duration-300 ${
                 isActive
-                  ? `${tab.activeColor} border text-[13px] shadow-[0_0_20px]`
+                  ? `${tab.activeColor} border sm:text-[13px] shadow-[0_0_20px]`
                   : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
               }`}
             >

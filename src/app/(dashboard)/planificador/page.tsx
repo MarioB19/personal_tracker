@@ -24,6 +24,7 @@ import {
   computePlanMonths,
   evaluateFinancialCut,
   EXPENSE_GROUPS,
+  LEGACY_EXPENSE_LINE_ID,
   summarizePlanYear,
   type PlanDraft,
 } from "@/lib/planning/savings-plan";
@@ -85,7 +86,9 @@ function ContextTag({
           : "border-white/10 bg-white/[0.04] text-zinc-300",
       )}
     >
-      {context === "BUSINESS" ? "Negocio" : "Personal"}
+      <span className="sm:hidden" aria-hidden="true">{context === "BUSINESS" ? "N" : "P"}</span>
+      <span className="hidden sm:inline">{context === "BUSINESS" ? "Negocio" : "Personal"}</span>
+      <span className="sr-only sm:hidden">{context === "BUSINESS" ? "Negocio" : "Personal"}</span>
     </button>
   );
 }
@@ -492,7 +495,7 @@ export default function PlanificadorPage() {
               type="button"
               onClick={() => patchIncome(line.id, { kind: NEXT_KIND[line.kind ?? "RECURRING"] })}
               title="Cambiar tipo: fijo, extra o por cobrar"
-              className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/[0.07] px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
+              className="hidden shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/[0.07] px-2 py-0.5 text-[11px] font-semibold text-emerald-200 sm:inline-block"
             >
               {INCOME_KIND_LABEL[line.kind ?? "RECURRING"]}
             </button>
@@ -513,7 +516,12 @@ export default function PlanificadorPage() {
             description={meta.description}
             icon={GROUP_ICONS[group]}
             accent={meta.accent}
-            lines={plan.expenseLines.filter((line) => line.group === group)}
+            lines={plan.expenseLines.filter(
+              (line) =>
+                line.group === group &&
+                // El total heredado (ene–oct) no aporta nada en meses donde ya hay desglose.
+                !(line.id === LEGACY_EXPENSE_LINE_ID && visibleMonths.every((month) => !line.values[month])),
+            )}
             visibleMonths={visibleMonths}
             valueTone="text-zinc-100"
             onChange={patchExpense}

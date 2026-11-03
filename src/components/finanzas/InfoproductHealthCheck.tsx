@@ -1155,13 +1155,13 @@ export default function InfoproductHealthCheck({
         </div>
 
         {/* Date Selector & Action Controls */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 md:w-auto md:justify-end">
           <button
             onClick={handleOpenConfigModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold bg-white/[0.03] border border-white/[0.08] text-zinc-300 hover:text-amber-400 hover:border-amber-500/30 transition-all"
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap px-3.5 py-2.5 rounded-2xl text-xs font-bold bg-white/[0.03] border border-white/[0.08] text-zinc-300 hover:text-amber-400 hover:border-amber-500/30 transition-all"
           >
-            <Settings className="w-4 h-4" />
-            Configurar Caja
+            <Settings className="w-4 h-4" aria-hidden="true" />
+            Configurar caja
           </button>
 
           {viewMode === "MONTHLY" ? (
@@ -1174,7 +1174,7 @@ export default function InfoproductHealthCheck({
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <div className="px-3 py-1 font-mono text-sm font-black text-amber-400 min-w-[140px] text-center">
+              <div className="whitespace-nowrap px-2 py-1 font-mono text-sm font-black text-amber-400 text-center sm:min-w-[140px] sm:px-3">
                 {formatMonthLabel(selectedMonth)}
               </div>
 

@@ -59,7 +59,38 @@ export function CashFlowTable({
           </p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {/* Móvil: una tarjeta por mes */}
+      <ul className="divide-y divide-white/[0.05] sm:hidden">
+        {visibleMonths.map((month) => (
+          <li key={month} className="px-4 py-3">
+            <p className={cn("mb-2 text-xs font-bold uppercase tracking-wider", month === anchorMonth ? "text-amber-300" : "text-zinc-400")}>
+              {MONTH_LABELS[month]}
+              {month === anchorMonth ? " · desde el corte" : ""}
+            </p>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
+              {ROWS.map((row) => (
+                <div key={row.key} className="flex items-center justify-between gap-2">
+                  <dt className={cn("text-zinc-400", row.strong && "font-semibold text-zinc-200")}>{row.label}</dt>
+                  <dd className={cn("num font-mono", row.strong && "font-bold", tone(row.key, months[month][row.key]))}>
+                    {formatCurrency(months[month][row.key])}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <label className="mt-2 flex items-center justify-between gap-3 text-[13px] text-zinc-400">
+              Ahorro real
+              <MoneyInput
+                value={actualSavings[month] ?? 0}
+                onChange={(value) => onActualChange(month, value)}
+                ariaLabel={`Ahorro real ${MONTH_LABELS[month]}`}
+                className="h-8 max-w-[140px] border border-white/10 text-sky-200"
+              />
+            </label>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-max text-sm">
           <thead>
             <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">

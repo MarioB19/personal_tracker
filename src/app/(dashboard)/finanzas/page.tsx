@@ -3,6 +3,7 @@
 import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
 import { useUid } from "@/lib/hooks/useAuth";
 import {
   getAllFinance,
@@ -16,7 +17,7 @@ import {
 import { db } from "@/lib/firebase/config";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { loadSavingsPlan, patchSavingsPlanTracking } from "@/lib/repositories/savings-plans";
-import { computePlanMonths } from "@/lib/planning/savings-plan";
+import { computePlanMonths, type PlanMonth } from "@/lib/planning/savings-plan";
 import {
   Income,
   Expense,
@@ -142,52 +143,48 @@ function StatCard({
   value,
   sub,
   color,
+  plan,
+  className,
 }: {
   icon: React.ElementType;
   label: string;
   value: string;
   sub?: string;
   color: "emerald" | "red" | "amber" | "orange" | "blue";
+  /** Comparación contra el Planificador del mes: registrado / planeado. */
+  plan?: { recorded: number; planned: number; noun: string };
+  className?: string;
 }) {
   const palette = {
-    emerald: {
-      card: "border-emerald-500/10 hover:border-emerald-500/20 shadow-[0_4px_20px_rgba(16,185,129,0.02)]",
-      icon: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-      value: "text-emerald-400",
-    },
-    red: {
-      card: "border-red-500/10 hover:border-red-500/20 shadow-[0_4px_20px_rgba(239,68,68,0.02)]",
-      icon: "bg-red-500/10 text-red-400 border-red-500/20",
-      value: "text-red-400",
-    },
-    amber: {
-      card: "border-amber-500/10 hover:border-amber-500/20 shadow-[0_4px_20px_rgba(245,158,11,0.02)]",
-      icon: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-      value: "text-amber-400",
-    },
-    orange: {
-      card: "border-orange-500/10 hover:border-orange-500/20 shadow-[0_4px_20px_rgba(249,115,22,0.02)]",
-      icon: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-      value: "text-orange-400",
-    },
-    blue: {
-      card: "border-blue-500/10 hover:border-blue-500/20 shadow-[0_4px_20px_rgba(59,130,246,0.02)]",
-      icon: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-      value: "text-blue-400",
-    },
+    emerald: { icon: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", value: "text-emerald-400", bar: "bg-emerald-400" },
+    red: { icon: "bg-red-500/10 text-red-400 border-red-500/20", value: "text-red-400", bar: "bg-red-400" },
+    amber: { icon: "bg-amber-500/10 text-amber-400 border-amber-500/20", value: "text-amber-400", bar: "bg-amber-400" },
+    orange: { icon: "bg-orange-500/10 text-orange-400 border-orange-500/20", value: "text-orange-400", bar: "bg-orange-400" },
+    blue: { icon: "bg-blue-500/10 text-blue-400 border-blue-500/20", value: "text-blue-400", bar: "bg-blue-400" },
   };
   const p = palette[color];
+  const ratio = plan && plan.planned > 0 ? Math.min(1, Math.max(0, plan.recorded / plan.planned)) : null;
 
   return (
-    <div className={cn("glass-card p-5 flex flex-col gap-3.5 border bg-[#0c0c0e]/80 transition-all duration-300", p.card)}>
-      <div className={cn("w-9 h-9 rounded-xl border flex items-center justify-center shrink-0", p.icon)}>
-        <Icon className="w-4 h-4" />
+    <div className={cn("surface flex min-w-0 flex-col gap-2 p-4 sm:p-5", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="eyebrow leading-snug">{label}</p>
+        <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border", p.icon)}>
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </div>
       </div>
-      <div>
-        <p className={cn("text-xl lg:text-2xl font-black tracking-tight font-mono", p.value)}>{value}</p>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mt-1">{label}</p>
-        {sub && <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">{sub}</p>}
-      </div>
+      <p className={cn("num truncate font-mono text-xl font-bold tracking-tight sm:text-2xl", p.value)}>{value}</p>
+      {plan && plan.planned > 0 ? (
+        <div className="space-y-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]" aria-hidden="true">
+            <div className={cn("h-full rounded-full", p.bar)} style={{ width: `${(ratio ?? 0) * 100}%` }} />
+          </div>
+          <p className="text-xs leading-snug text-zinc-400">
+            de {formatCurrency(plan.planned)} {plan.noun}
+          </p>
+        </div>
+      ) : null}
+      {sub ? <p className="text-xs leading-snug text-zinc-500">{sub}</p> : null}
     </div>
   );
 }
@@ -211,36 +208,40 @@ function ListRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-3.5 px-5 group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.01] transition-all relative overflow-hidden rounded-xl">
-      <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-4">
-        {Icon && (
-          <div className={cn("w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors", iconColor)}>
-            <Icon className="w-4 h-4" />
-          </div>
-        )}
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-zinc-100 truncate">{title}</p>
-          <p className="text-[11px] text-zinc-500 mt-0.5 font-medium">{subtitle}</p>
+    <div className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 rounded-xl px-3 py-3.5 transition-colors hover:bg-white/[0.015] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center sm:px-5">
+      {Icon ? (
+        <div className={cn("row-span-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border sm:row-span-1", iconColor)}>
+          <Icon className="h-4 w-4" aria-hidden="true" />
         </div>
+      ) : (
+        <span className="row-span-2 sm:row-span-1" />
+      )}
+      <div className="min-w-0">
+        <p className="text-sm font-semibold leading-snug text-zinc-100 sm:truncate">{title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">{subtitle}</p>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="col-start-2 col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:justify-end [&>div]:mr-0 [&>div]:flex-wrap [&>div]:gap-2">
         {right}
-        <div className="flex items-center gap-1">
-          {onEdit && (
-            <button
-              onClick={onEdit}
-              className="md:opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 rounded-lg flex items-center justify-center border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 active:scale-95"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          )}
+      </div>
+      <div className="col-start-3 row-start-1 flex items-center gap-1 sm:col-start-4">
+        {onEdit && (
           <button
-            onClick={onDelete}
-            className="md:opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8 rounded-lg flex items-center justify-center border border-white/5 bg-white/5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 active:scale-95"
+            type="button"
+            onClick={onEdit}
+            aria-label={`Editar ${title}`}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 transition hover:border-amber-500/20 hover:bg-amber-500/10 hover:text-amber-400 active:scale-95 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Quitar ${title}`}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 transition hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-400 active:scale-95 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
@@ -259,8 +260,8 @@ function Section({
   return (
     <div className="glass-card bg-[#0c0c0e]/60 border border-white/[0.04] rounded-2xl overflow-hidden shadow-[var(--shadow-md)]">
       {(title || action) && (
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04] bg-[#0c0c0e]/30">
-          {title && <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">{title}</h3>}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5 border-b border-white/[0.04] bg-[#0c0c0e]/30">
+          {title && <h3 className="min-w-0 text-xs font-black uppercase tracking-wider text-zinc-400">{title}</h3>}
           {action}
         </div>
       )}
@@ -283,6 +284,7 @@ export default function FinanzasPage() {
   const [infoproductOps, setInfoproductOps] = useState<InfoproductOp[]>([]);
   const [infoproductFixedExpenses, setInfoproductFixedExpenses] = useState<InfoproductFixedExpense[]>([]);
   const [initialSavings, setInitialSavings] = useState<number>(0);
+  const [plannedMonth, setPlannedMonth] = useState<PlanMonth | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -380,6 +382,7 @@ export default function FinanzasPage() {
       setInitialSavings(initial);
       const acts = data.actualSavingsValues;
       const plannedMonths = computePlanMonths(data);
+      setPlannedMonth(plannedMonths[Number(monthInMexicoCity().slice(5, 7)) - 1] ?? null);
 
       synSavings = Array.from({ length: 12 }).map((_, i) => {
         const plannedAmount = plannedMonths[i].net;
@@ -1204,14 +1207,16 @@ export default function FinanzasPage() {
         ];
 
   const tabNavigation = (
-    <div className="flex gap-1.5 bg-zinc-950/40 p-1.5 border border-white/5 rounded-2xl overflow-x-auto select-none">
+    <div role="tablist" aria-label="Secciones de finanzas" className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/5 bg-zinc-950/40 p-1.5 select-none sm:flex sm:overflow-x-auto">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
+          role="tab"
+          aria-selected={activeTab === tab.key}
           onClick={() => setActiveTab(tab.key)}
           className={cn(
-            "flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200",
+            "flex items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold whitespace-nowrap transition-all duration-200 sm:justify-start sm:gap-2.5 sm:px-4",
             activeTab === tab.key
               ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.06)]"
               : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
@@ -1309,31 +1314,33 @@ export default function FinanzasPage() {
       ) : (
         <>
           {/* Stats Grid Personal */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <StatCard
               icon={TrendingUp}
-              label="Ingresos Mensuales"
+              label="Ingresos"
               value={formatCurrency(totalIncome)}
-              sub={monthlyIncomesList.length > 0 ? `${monthlyIncomesList.length} fuente${monthlyIncomesList.length > 1 ? "s" : ""}` : "Sin ingresos"}
+              sub={monthlyIncomesList.length > 0 ? `${monthlyIncomesList.length} fuente${monthlyIncomesList.length > 1 ? "s" : ""} registradas` : "Sin ingresos"}
+              plan={plannedMonth ? { recorded: totalIncome, planned: plannedMonth.incomeByContext.PERSONAL, noun: "planeados" } : undefined}
               color="emerald"
             />
             <StatCard
               icon={TrendingDown}
-              label="Gastos Mensuales"
+              label="Gastos"
               value={formatCurrency(totalExpenses)}
-              sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""}` : "Sin gastos"}
+              sub={monthlyExpensesList.length > 0 ? `${monthlyExpensesList.length} concepto${monthlyExpensesList.length > 1 ? "s" : ""} registrados` : "Sin gastos registrados"}
+              plan={plannedMonth ? { recorded: totalExpenses, planned: plannedMonth.expensesByContext.PERSONAL, noun: "planeados" } : undefined}
               color="red"
             />
             <StatCard
               icon={Wallet}
-              label="Balance Neto"
+              label="Balance"
               value={formatCurrency(netBalance)}
               sub={`Tasa de Ahorro: ${savingsRate}%`}
               color={netBalance >= 0 ? "amber" : "red"}
             />
             <StatCard
               icon={CreditCard}
-              label="Deuda Activa"
+              label="Deuda activa"
               value={formatCurrency(totalDebt)}
               sub={debts.filter((d) => d.status === "ACTIVE").length > 0
                 ? `${debts.filter((d) => d.status === "ACTIVE").length} deuda${debts.filter((d) => d.status === "ACTIVE").length > 1 ? "s" : ""}`
@@ -1342,10 +1349,11 @@ export default function FinanzasPage() {
             />
             <StatCard
               icon={PiggyBank}
-              label="Total Ahorrado"
+              label="Total ahorrado"
               value={formatCurrency(totalSaved)}
-              sub={avgCostPerHour > 0 ? `${formatCurrency(avgCostPerHour)}/hr` : "Sin salario base"}
+              sub={avgCostPerHour > 0 ? `Tu hora vale ${formatCurrency(avgCostPerHour)}` : "Sin salario base"}
               color="blue"
+              className="col-span-2 lg:col-span-1"
             />
           </div>
 
@@ -1621,7 +1629,7 @@ export default function FinanzasPage() {
       ══════════════════════════════════════ */}
       {activeTab === "ingresos" && (
         <Section
-          title={financialContext === "BUSINESS" ? "Ingresos del Negocio" : "Fuentes de Ingresos Activas"}
+          title={financialContext === "BUSINESS" ? "Ingresos del negocio" : "Ingresos del mes"}
           action={
             <button
               onClick={openCreateIncome}
@@ -1676,9 +1684,25 @@ export default function FinanzasPage() {
       {/* ══════════════════════════════════════
           TAB: GASTOS
       ══════════════════════════════════════ */}
+      {activeTab === "gastos" && financialContext === "PERSONAL" && plannedMonth && plannedMonth.expensesByContext.PERSONAL > totalExpenses ? (
+        <div className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-zinc-100">
+              Llevas {formatCurrency(totalExpenses)} registrados de {formatCurrency(plannedMonth.expensesByContext.PERSONAL)} que planeaste este mes
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              Aquí solo cuentan los gastos que capturas. Los recurrentes se suman solos; lo variable (comidas, salidas, transporte) y los pagos a meses aparecen cuando los registras.
+            </p>
+          </div>
+          <Link href="/planificador" className="btn-secondary shrink-0 px-3 py-2 text-xs">
+            Ver plan del mes
+          </Link>
+        </div>
+      ) : null}
+
       {activeTab === "gastos" && (
         <Section
-          title={financialContext === "BUSINESS" ? "Compromisos y gastos del negocio" : "Listado de Conceptos de Gastos"}
+          title={financialContext === "BUSINESS" ? "Compromisos y gastos del negocio" : "Gastos del mes"}
           action={
             <button
               onClick={openCreateExpense}
