@@ -1663,10 +1663,10 @@ export default function InfoproductHealthCheck({
                             <div>{op.productName}</div>
                             {op.source === "VIBE" && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-400">
+                                <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-400">
                                   Vibe
                                 </span>
-                                <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-amber-400">
+                                <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-400">
                                   {op.track === "WHATSAPP" ? "WhatsApp" : op.track === "LANDING" ? "Landing" : "Sin clasificar"}
                                 </span>
                               </div>
@@ -1692,7 +1692,7 @@ export default function InfoproductHealthCheck({
                           </td>
                           <td className="py-4 px-6 text-right">
                             {op.source === "VIBE" ? (
-                              <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
                                 Solo lectura
                               </span>
                             ) : (
@@ -1806,7 +1806,7 @@ export default function InfoproductHealthCheck({
 
                     <div className="flex items-center gap-3 font-mono">
                       <span className="text-sm font-black text-violet-400">-{formatCurrency(nonNegativeAmount(expense.amount))}</span>
-                      <span className="rounded-lg border border-violet-500/15 bg-violet-500/[0.06] px-2 py-1 text-[9px] font-black uppercase tracking-wider text-violet-300">
+                      <span className="rounded-lg border border-violet-500/15 bg-violet-500/[0.06] px-2 py-1 text-[10px] font-black uppercase tracking-wider text-violet-300">
                         {expense.type === "SUSCRIPCION" ? "Suscripción" : "Gasto"}
                       </span>
                     </div>
@@ -1862,7 +1862,7 @@ export default function InfoproductHealthCheck({
             <div className={cn("glass-card p-6 bg-[#0c0c0e]/90 rounded-3xl flex flex-col justify-between space-y-3 shadow-xl border", annualNetResult >= 0 ? "border-emerald-500/20" : "border-red-500/20")}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Resultado Anual</span>
-                <span className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border", annualNetResult >= 0 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20")}>
+                <span className={cn("text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border", annualNetResult >= 0 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20")}>
                   {annualNetResult >= 0 ? "+ POSITIVO" : "- DEFICIT"}
                 </span>
               </div>
@@ -1975,7 +1975,7 @@ export default function InfoproductHealthCheck({
                   {!m.isFuture && m.confidence !== "EMPTY" && (
                     <span
                       className={cn(
-                        "self-start rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
+                        "self-start rounded-md border px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
                         m.confidence === "CONFIRMED"
                           ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
                           : m.confidence === "OPEN"

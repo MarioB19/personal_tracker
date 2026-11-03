@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback } from "react";
 import { useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, update, remove } from "@/lib/repositories/firestore";
@@ -426,7 +428,7 @@ function MonthCard({
           {monthGoals.length > 0 && (
             <div className="mt-3.5 bg-black/20 border border-white/[0.03] rounded-xl p-2.5 shadow-inner">
               <div className="flex justify-between items-center mb-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">Progreso del mes</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Progreso del mes</span>
                 <span className={cn("text-[10px] font-black font-mono", quarterAccentText[row.quarter])}>
                   {averageProgress}%
                 </span>
@@ -759,16 +761,12 @@ export default function HojaDeRutaPage() {
   return (
     <div className="page-enter space-y-8 pb-10">
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-              <Compass className="w-5 h-5 text-black" />
-            </div>
-            Hoja de Ruta
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1">Organiza tus metas por año, trimestre y mes. Visualiza tu progreso y mantén el enfoque en lo que importa.</p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={Compass}
+          title="Hoja de ruta"
+          subtitle="Metas por año, trimestre y mes"
+        />
         
         <div className="flex flex-wrap items-center gap-3">
           {/* Calendar Stats Badge */}
@@ -889,7 +887,7 @@ export default function HojaDeRutaPage() {
                             Q4: { text: "text-violet-400", bg: "bg-violet-500/10", fill: "bg-gradient-to-r from-violet-500 to-purple-500" },
                           };
                           return (
-                            <div key={q} className="flex items-center gap-1.5 bg-black/40 border border-white/5 rounded-lg px-2 py-1 text-[9px] font-bold">
+                            <div key={q} className="flex items-center gap-1.5 bg-black/40 border border-white/5 rounded-lg px-2 py-1 text-[10px] font-bold">
                               <span className={cn("font-black tracking-tight", colors[q].text)}>{q}</span>
                               <div className="w-10 h-1 bg-white/[0.04] rounded-full overflow-hidden shrink-0">
                                 <div className={cn("h-full rounded-full transition-all duration-500", colors[q].fill)} style={{ width: `${progress}%` }} />
@@ -1072,10 +1070,10 @@ export default function HojaDeRutaPage() {
                                           {activeMoveGoalId === g.id ? (
                                             <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                                               <div className="flex items-center justify-between">
-                                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Mover a:</span>
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Mover a:</span>
                                                 <button
                                                   onClick={() => setActiveMoveGoalId(null)}
-                                                  className="text-zinc-500 hover:text-white text-[9px] font-bold flex items-center gap-0.5"
+                                                  className="text-zinc-500 hover:text-white text-[10px] font-bold flex items-center gap-0.5"
                                                 >
                                                   <X className="size-3" /> Cancelar
                                                 </button>

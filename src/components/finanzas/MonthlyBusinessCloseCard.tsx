@@ -191,7 +191,7 @@ export default function MonthlyBusinessCloseCard({
 
         <div className="grid grid-cols-2 gap-2.5 rounded-2xl border border-white/[0.06] bg-black/25 p-3">
           <div className="rounded-xl border border-emerald-500/10 bg-emerald-500/[0.04] p-3">
-            <p className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
               Ingresos
             </p>
             <p className="mt-1 font-mono text-base font-black text-emerald-400">
@@ -199,7 +199,7 @@ export default function MonthlyBusinessCloseCard({
             </p>
           </div>
           <div className="rounded-xl border border-red-500/10 bg-red-500/[0.04] p-3">
-            <p className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
               Pauta
             </p>
             <p className="mt-1 font-mono text-base font-black text-red-400">
@@ -207,7 +207,7 @@ export default function MonthlyBusinessCloseCard({
             </p>
           </div>
           <div className="rounded-xl border border-violet-500/10 bg-violet-500/[0.04] p-3">
-            <p className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
               Compromisos fijos
             </p>
             <p className="mt-1 font-mono text-base font-black text-violet-400">
@@ -215,7 +215,7 @@ export default function MonthlyBusinessCloseCard({
             </p>
           </div>
           <div className="rounded-xl border border-amber-500/10 bg-amber-500/[0.04] p-3">
-            <p className="text-[9px] font-black uppercase tracking-wider text-zinc-500">
+            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
               Otros del periodo
             </p>
             <p className="mt-1 font-mono text-base font-black text-amber-400">

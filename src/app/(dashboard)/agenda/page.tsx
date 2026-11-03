@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, remove, update } from "@/lib/repositories/firestore";
@@ -946,18 +948,13 @@ export default function AgendaPage() {
     <div className="page-enter space-y-6 pb-10">
       
       {/* ── Page Header ─────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-              <Calendar className="w-5 h-5 text-black" />
-            </div>
-            Agenda y Horarios
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">
-              {view === "week" ? `Ciclo Semanal ${weekId} · Eficiencia: ${complianceRate}%` : view === "month" ? `${monthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}` : "Sandbox de Rutina Ideal"}
-          </p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={Calendar}
+          tone="sky"
+          title="Agenda"
+          subtitle={view === "week" ? `Semana ${weekId} · cumplimiento ${complianceRate}%` : view === "month" ? monthDate.toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "Rutina maestra: tu semana ideal"}
+        />
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Week/Month/Template views controller */}
@@ -994,7 +991,7 @@ export default function AgendaPage() {
                 </button>
                 {showTemplateMenu && (
                   <div className="absolute right-0 mt-2 bg-zinc-950 border border-white/5 rounded-2xl shadow-2xl z-25 py-2 min-w-[220px] animate-in fade-in duration-200">
-                    <p className="px-3.5 py-1 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Gestión de Rutina</p>
+                    <p className="px-3.5 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Gestión de Rutina</p>
                     <button 
                       onClick={handleSaveAsTemplate} 
                       className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-zinc-300 hover:bg-white/5 w-full text-left font-semibold hover:text-white transition-colors"
@@ -1010,7 +1007,7 @@ export default function AgendaPage() {
                           <CalendarCheck className="w-3.5 h-3.5 text-emerald-400" /> Aplicar a esta Semana
                         </button>
                         <div className="border-t border-white/[0.03] my-1" />
-                        <p className="px-3.5 py-1 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Generación en Lote (Futura)</p>
+                        <p className="px-3.5 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Generación en Lote (Futura)</p>
                         {[2, 4, 8, 12].map(num => (
                           <button
                             key={num}
@@ -1018,7 +1015,7 @@ export default function AgendaPage() {
                             className="flex items-center justify-between px-4 py-2 text-xs text-zinc-400 hover:bg-white/5 w-full hover:text-white transition-colors font-medium"
                           >
                             <span>Generar +{num} Semanas</span>
-                            <span className="text-[9px] text-zinc-600 font-mono font-bold font-mono">slots</span>
+                            <span className="text-[10px] text-zinc-600 font-mono font-bold font-mono">slots</span>
                           </button>
                         ))}
                       </>
@@ -1075,7 +1072,7 @@ export default function AgendaPage() {
                 <div className="space-y-4 my-1">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
+                      <div className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
                         {cfg.label}
                       </div>
                       <span className="text-[10px] font-bold text-zinc-500 font-mono">
@@ -1181,7 +1178,7 @@ export default function AgendaPage() {
               {sortedActivities.length > 0 && (
                 <button
                   onClick={() => setIsStatsModalOpen(true)}
-                  className="text-[9px] font-bold text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/20 active:scale-95 transition-all shrink-0"
+                  className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 rounded-lg border border-amber-500/20 active:scale-95 transition-all shrink-0"
                 >
                   Ver Todo
                 </button>
@@ -1198,13 +1195,13 @@ export default function AgendaPage() {
                 return (
                   <div key={index} className="flex items-center justify-between p-2 rounded-xl bg-white/[0.015] border border-white/[0.02] hover:bg-white/[0.03] transition-colors duration-150">
                     <div className="flex items-center gap-2 truncate">
-                      <span className="text-[9px] font-bold font-mono text-zinc-600 bg-white/5 w-4 h-4 rounded-full flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold font-mono text-zinc-600 bg-white/5 w-4 h-4 rounded-full flex items-center justify-center shrink-0">
                         {index + 1}
                       </span>
                       <Icon className={cn("w-3 h-3 shrink-0", cfg.text)} />
                       <span className="text-[10px] font-bold text-zinc-300 truncate">{act.title}</span>
                     </div>
-                    <div className="px-2.5 py-0.5 rounded-lg bg-zinc-950/60 border border-white/5 text-[9px] font-black text-zinc-400 font-mono shrink-0">
+                    <div className="px-2.5 py-0.5 rounded-lg bg-zinc-950/60 border border-white/5 text-[10px] font-black text-zinc-400 font-mono shrink-0">
                       {act.hours.toFixed(1)}h
                     </div>
                   </div>
@@ -1253,7 +1250,7 @@ export default function AgendaPage() {
             <button
               onClick={() => setFilterCategory("ALL")}
               className={cn(
-                "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border transition-all active:scale-95",
+                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all active:scale-95",
                 filterCategory === "ALL"
                   ? "bg-white/10 border-white/15 text-white"
                   : "bg-black/20 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
@@ -1269,7 +1266,7 @@ export default function AgendaPage() {
                   key={cat}
                   onClick={() => setFilterCategory(cat)}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border transition-all active:scale-95 flex items-center gap-1.5",
+                    "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all active:scale-95 flex items-center gap-1.5",
                     isSelected
                       ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
                       : "bg-black/20 border-white/5 text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
@@ -1313,7 +1310,7 @@ export default function AgendaPage() {
                     const isCurrentDay = currentWeekOffset === 0 && ((new Date()).getDay()===0?"SUN":getDayKey(new Date())) === day.key;
                     return (
                       <div key={day.key} className="py-2 text-center flex flex-col items-center justify-center">
-                        <span className={cn("text-[9px] font-black uppercase tracking-widest", isCurrentDay ? "text-amber-400" : "text-zinc-500")}>
+                        <span className={cn("text-[10px] font-black uppercase tracking-widest", isCurrentDay ? "text-amber-400" : "text-zinc-500")}>
                           {day.label}
                         </span>
                         <button 
@@ -1340,7 +1337,7 @@ export default function AgendaPage() {
                 {/* Left side: Hour labels */}
                 <div className="border-r border-white/5 flex flex-col select-none bg-black/10">
                   {Array.from({ length: 24 }).map((_, i) => (
-                    <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
+                    <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[10px] font-mono font-bold text-zinc-600 leading-none">
                       {i.toString().padStart(2, "0")}:00
                     </div>
                   ))}
@@ -1430,7 +1427,7 @@ export default function AgendaPage() {
                                 <span className={cn(
                                   "font-black text-white leading-tight truncate group-hover:text-amber-400 transition-colors", 
                                   isCompleted && "line-through opacity-70",
-                                  isShortBlock ? "text-[8px] mt-0" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
+                                  isShortBlock ? "text-[10px] mt-0" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
                                 )}>
                                   {block.title}
                                 </span>
@@ -1439,7 +1436,7 @@ export default function AgendaPage() {
                               {!isShortBlock && !isMediumBlock && (
                                 <div className="flex items-center gap-1 mt-auto bg-black/20 px-1.5 py-0.5 rounded-md border border-white/5 w-fit max-w-full">
                                   <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
-                                  <span className="text-[7px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
+                                  <span className="text-[10px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
                                     {block.category.toLowerCase()}
                                   </span>
                                 </div>
@@ -1484,7 +1481,7 @@ export default function AgendaPage() {
                                   {blocksForDay.map(b => {
                                       const cfg = CATEGORY_CONFIG[b.category];
                                       return (
-                                          <div key={b.id} className={cn("text-[9px] px-1.5 py-0.5 rounded truncate border-l border-white/10 font-medium", cfg.bg)}>
+                                          <div key={b.id} className={cn("text-[10px] px-1.5 py-0.5 rounded truncate border-l border-white/10 font-medium", cfg.bg)}>
                                               <span className="font-bold text-white/95 mr-1 font-mono">{b.startTime}</span>
                                               <span className="text-zinc-200 font-bold">{b.title}</span>
                                           </div>
@@ -1550,7 +1547,7 @@ export default function AgendaPage() {
                   <div className="grid grid-cols-7 divide-x divide-white/5">
                     {DAYS.map(day => (
                       <div key={day.key} className="py-2 text-center flex flex-col items-center justify-center">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                           {day.label}
                         </span>
                         <button 
@@ -1576,7 +1573,7 @@ export default function AgendaPage() {
                   {/* Hour labels */}
                   <div className="border-r border-white/5 flex flex-col select-none bg-black/10">
                     {Array.from({ length: 24 }).map((_, i) => (
-                      <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[8px] font-mono font-bold text-zinc-600 leading-none">
+                      <div key={i} className="h-[60px] flex items-center justify-end pr-2.5 text-[10px] font-mono font-bold text-zinc-600 leading-none">
                         {i.toString().padStart(2, "0")}:00
                       </div>
                     ))}
@@ -1648,7 +1645,7 @@ export default function AgendaPage() {
                                   )}
                                   <span className={cn(
                                     "font-black text-white leading-tight truncate group-hover:text-amber-400 transition-colors", 
-                                    isShortBlock ? "text-[8px] mt-0 tracking-tight leading-none" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
+                                    isShortBlock ? "text-[10px] mt-0 tracking-tight leading-none" : isMediumBlock ? "text-[8.5px] mt-0.5" : "text-[10px] mt-1"
                                   )}>
                                     {slot.title}
                                   </span>
@@ -1657,7 +1654,7 @@ export default function AgendaPage() {
                                 {!isShortBlock && !isMediumBlock && (
                                   <div className="flex items-center gap-1 mt-auto bg-black/20 px-1.5 py-0.5 rounded-md border border-white/5 w-fit max-w-full">
                                     <CategoryIcon className={cn("w-2.5 h-2.5 shrink-0", cfg.text)} />
-                                    <span className="text-[7px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
+                                    <span className="text-[10px] font-black uppercase tracking-wider opacity-85 truncate leading-none capitalize text-zinc-300">
                                       {slot.category.toLowerCase()}
                                     </span>
                                   </div>
@@ -1764,7 +1761,7 @@ export default function AgendaPage() {
                         type="button"
                         onClick={() => setCategory(c)}
                         className={cn(
-                          "flex flex-col items-center justify-center py-2.5 rounded-xl border text-[9px] font-black transition-all transform active:scale-95",
+                          "flex flex-col items-center justify-center py-2.5 rounded-xl border text-[10px] font-black transition-all transform active:scale-95",
                           isSelected
                             ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
                             : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
@@ -1862,7 +1859,7 @@ export default function AgendaPage() {
                 {isEditingBlock ? (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Inicio</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Inicio</span>
                       <input 
                         type="time" 
                         value={editingStartTime} 
@@ -1872,7 +1869,7 @@ export default function AgendaPage() {
                       />
                     </div>
                     <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Término</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Hora Término</span>
                       <input 
                         type="time" 
                         value={editingEndTime} 
@@ -1885,11 +1882,11 @@ export default function AgendaPage() {
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Horario</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Horario</span>
                       <span className="font-mono text-zinc-200 font-bold">{block.startTime} - {block.endTime}</span>
                     </div>
                     <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Duración</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Duración</span>
                       <span className="font-mono text-zinc-200 font-bold">{duration.toFixed(1)} horas</span>
                     </div>
                   </div>
@@ -1898,7 +1895,7 @@ export default function AgendaPage() {
                 {isEditingBlock ? (
                   <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between gap-4">
                     <div>
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
                       <select
                         value={editingCategory}
                         onChange={(e) => setEditingCategory(e.target.value as BlockCategory)}
@@ -1910,17 +1907,17 @@ export default function AgendaPage() {
                         ))}
                       </select>
                     </div>
-                    <span className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", CATEGORY_CONFIG[editingCategory].bg, CATEGORY_CONFIG[editingCategory].text)}>
+                    <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border border-white/5", CATEGORY_CONFIG[editingCategory].bg, CATEGORY_CONFIG[editingCategory].text)}>
                       {editingCategory}
                     </span>
                   </div>
                 ) : (
                   <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Categoría</span>
                       <span className="font-black text-zinc-200">{cfg.label}</span>
                     </div>
-                    <span className={cn("px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
+                    <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border border-white/5", cfg.bg, cfg.text)}>
                       {block.category}
                     </span>
                   </div>
@@ -1929,12 +1926,12 @@ export default function AgendaPage() {
                 {view !== "template" && (
                   <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl flex items-center justify-between">
                     <div>
-                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Estado de cumplimiento</span>
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Estado de cumplimiento</span>
                       <span className="font-bold text-zinc-300">
                         {isBlockCompleted(block as TimeBlock) ? "Completado (Histórico)" : "Pendiente / Activo"}
                       </span>
                     </div>
-                    <span className={cn("px-2 py-0.5 rounded-lg text-[9px] font-black border uppercase", 
+                    <span className={cn("px-2 py-0.5 rounded-lg text-[10px] font-black border uppercase", 
                       isBlockCompleted(block as TimeBlock) ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                     )}>
                       {isBlockCompleted(block as TimeBlock) ? "Pasado" : "Activo"}
@@ -2074,14 +2071,14 @@ export default function AgendaPage() {
                     <div key={index} className="p-3.5 rounded-2xl bg-white/[0.01] border border-white/[0.03] hover:bg-white/[0.02] transition-colors duration-150 flex flex-col space-y-2.5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 truncate">
-                          <span className="text-[9px] font-bold font-mono text-zinc-600 bg-white/5 w-4.5 h-4.5 rounded-full flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold font-mono text-zinc-600 bg-white/5 w-4.5 h-4.5 rounded-full flex items-center justify-center shrink-0">
                             {index + 1}
                           </span>
                           <Icon className={cn("w-3.5 h-3.5 shrink-0", cfg.text)} />
                           <span className="text-xs font-bold text-zinc-200 truncate">{act.title}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className={cn("px-2 py-0.5 rounded-lg text-[8px] font-black uppercase border border-white/5 leading-none", cfg.bg, cfg.text)}>
+                          <span className={cn("px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border border-white/5 leading-none", cfg.bg, cfg.text)}>
                             {category.toLowerCase()}
                           </span>
                           <div className="px-2.5 py-1 rounded-xl bg-zinc-950/80 border border-white/5 text-xs font-black text-white font-mono leading-none">
@@ -2103,7 +2100,7 @@ export default function AgendaPage() {
                             style={{ width: `${relativeWidth}%` }} 
                           />
                         </div>
-                        <div className="flex items-center justify-between text-[9px] text-zinc-500 font-semibold select-none">
+                        <div className="flex items-center justify-between text-[10px] text-zinc-500 font-semibold select-none">
                           <span>Dedicación semanal</span>
                           <span className="font-bold text-zinc-400 font-mono">{percentage.toFixed(1)}% del tiempo programado</span>
                         </div>

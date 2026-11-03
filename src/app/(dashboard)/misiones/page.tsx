@@ -1,5 +1,7 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, create, update, remove } from "@/lib/repositories/firestore";
@@ -308,16 +310,8 @@ export default function MisionesPage() {
   return (
     <div className="page-enter space-y-8 pb-10">
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-              <Swords className="w-5 h-5 text-black" />
-            </div>
-            Tablero de Misiones
-          </h1>
-          <p className="text-xs text-zinc-500 mt-1">Conquista desafíos y acumula experiencia de vida</p>
-        </div>
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle icon={Swords} title="Misiones" subtitle="Desafíos activos, checklist y progreso" />
         
         <div className="flex flex-wrap items-center gap-3">
           {/* Difficulty Filter */}
@@ -346,7 +340,7 @@ export default function MisionesPage() {
                 )}
                 title={`Dificultad ${d}`}
               >
-                <span className="font-mono text-[9px]">D{d}</span>
+                <span className="font-mono text-[10px]">D{d}</span>
               </button>
             ))}
           </div>
@@ -616,7 +610,7 @@ export default function MisionesPage() {
                             type="button"
                             onClick={() => setDifficulty(d)} 
                             className={cn(
-                              "flex flex-col items-center justify-center py-2 rounded-lg border text-[9px] font-black transition-all transform active:scale-95",
+                              "flex flex-col items-center justify-center py-2 rounded-lg border text-[10px] font-black transition-all transform active:scale-95",
                               isSelected 
                                 ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.1)]" 
                                 : "bg-black/30 border-white/[0.04] text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"
@@ -624,7 +618,7 @@ export default function MisionesPage() {
                             title={tier.label}
                           >
                             <span className="font-mono text-xs">{d}</span>
-                            <span className="text-[8px] uppercase tracking-tighter">{tier.label}</span>
+                            <span className="text-[10px] uppercase tracking-tighter">{tier.label}</span>
                           </button>
                         );
                       })}
@@ -738,7 +732,7 @@ export default function MisionesPage() {
                         {getStatusLabel(catStatus)}
                       </h2>
                     </div>
-                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded-full text-[9px] text-zinc-400 font-bold tracking-normal font-mono">
+                    <span className="bg-white/5 border border-white/5 px-2 py-0.5 rounded-full text-[10px] text-zinc-400 font-bold tracking-normal font-mono">
                       {catMissions.length}
                     </span>
                   </div>
@@ -774,11 +768,11 @@ export default function MisionesPage() {
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                    <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/5 border border-white/5 text-zinc-400">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 border border-white/5 text-zinc-400">
                                       {m.category || "General"}
                                     </span>
                                     {isOverdue && (
-                                      <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-400 animate-pulse">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-400 animate-pulse">
                                         Vencida
                                       </span>
                                     )}
@@ -811,7 +805,7 @@ export default function MisionesPage() {
                               {/* Strategy Alignment Badge */}
                               {associatedGoal && (
                                 <div className="mt-3 flex">
-                                  <span className="inline-flex items-center gap-1.5 text-[9px] text-zinc-400 bg-white/[0.01] border border-white/5 px-2 py-0.5 rounded-md font-semibold tracking-tight">
+                                  <span className="inline-flex items-center gap-1.5 text-[10px] text-zinc-400 bg-white/[0.01] border border-white/5 px-2 py-0.5 rounded-md font-semibold tracking-tight">
                                     <TargetIcon className="w-3 h-3 text-amber-500" />
                                     {associatedGoal.name}
                                   </span>
@@ -857,7 +851,7 @@ export default function MisionesPage() {
                                 <div className="flex items-center gap-1.5 shrink-0 relative pt-3.5">
                                   {m.targetDate && (
                                      <span className={cn(
-                                       "flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold border shrink-0 transition-all font-mono",
+                                       "flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border shrink-0 transition-all font-mono",
                                        isOverdue 
                                          ? "bg-red-500/10 border-red-500/20 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.15)] animate-pulse" 
                                          : "bg-white/[0.01] border-white/5 text-zinc-500"

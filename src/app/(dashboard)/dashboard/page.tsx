@@ -1,10 +1,11 @@
 "use client";
 
+import { PageTitle, PAGE_HEADER_CLASS } from "@/components/ui/PageHeader";
+
 import { useEffect, useState, useCallback } from "react";
 import { useAuth, useUid } from "@/lib/hooks/useAuth";
 import { getAll, update, getAllFinance } from "@/lib/repositories/firestore";
-import { db } from "@/lib/firebase/config";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { loadSavingsPlan } from "@/lib/repositories/savings-plans";
 import { generateAlerts, Alert } from "@/lib/services/tracking.service";
 import {
   Goal,
@@ -198,19 +199,11 @@ export default function DashboardPage() {
       setAlerts(generateAlerts(g, m));
 
       // Fetch Savings Plan for initial + actual savings
-      const spQuery = query(
-        collection(db, "savings_plans"),
-        where("userId", "==", uid),
-        where("year", "==", new Date().getFullYear())
-      );
-      const spSnap = await getDocs(spQuery);
+      const savingsPlan = await loadSavingsPlan(uid, Number(monthInMexicoCity().slice(0, 4)));
       let totalSaved = 0;
-      if (!spSnap.empty) {
-        const spData = spSnap.docs[0].data();
-        const initial = spData.initialSavings || 0;
-        const actualValues = spData.actualSavingsValues || Array(12).fill(0);
-        const actualSaved = actualValues.reduce((sum: number, val: number) => sum + val, 0);
-        totalSaved = initial + actualSaved;
+      if (savingsPlan.exists) {
+        const actualSaved = savingsPlan.plan.actualSavingsValues.reduce((sum, val) => sum + val, 0);
+        totalSaved = savingsPlan.plan.initialSavings + actualSaved;
       }
       setSavingsTotal(totalSaved);
 
@@ -395,24 +388,15 @@ export default function DashboardPage() {
     <div className="page-enter space-y-8 pb-10">
       
       {/* ── HERO HEADER ─────────────────────── */}
-      <div className="flex flex-col items-center text-center lg:flex-row lg:items-center lg:text-left lg:justify-between mb-2 mt-4 gap-4">
-        <div className="flex flex-col items-center lg:flex-row lg:items-center gap-4">
-          <div className="hero-icon-box lg:mb-0 relative" style={{ animation: "float 6s ease-in-out infinite" }}>
-            <Sparkles className="w-10 h-10 text-amber-400" />
-            <div className="absolute inset-0 bg-amber-500/20 blur-xl rounded-full" />
-          </div>
-          <div>
-            <h1 className="hero-title lg:text-3xl lg:mb-1">
-              Hola, <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 font-black">Brandon</span>
-            </h1>
-            <p className="hero-subtitle lg:text-left lg:mx-0">
-              {now.toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </p>
-          </div>
-        </div>
-        
+      <div className={PAGE_HEADER_CLASS}>
+        <PageTitle
+          icon={Sparkles}
+          title={<>Hola, <span className="text-amber-300">Brandon</span></>}
+          subtitle={<span className="first-letter:uppercase">{now.toLocaleDateString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>}
+        />
+
         {/* Operations pill widget */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-xs text-zinc-400 bg-white/[0.03] border border-white/[0.05] rounded-2xl px-4 py-2.5">
             <Zap className={`w-3.5 h-3.5 ${todayBlocks.find(isBlockActive) ? "text-amber-400 animate-pulse" : "text-zinc-600"}`} />
             <span className="font-medium truncate max-w-[200px]">{getActiveBlockLabel()}</span>
@@ -505,7 +489,7 @@ export default function DashboardPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="text-[10px] font-mono font-bold text-zinc-400">{block.startTime} - {block.endTime}</span>
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase border ${
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase border ${
                               block.executedStatus === "COMPLETED"
                                 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
                                 : block.executedStatus === "SKIPPED"
@@ -522,10 +506,10 @@ export default function DashboardPage() {
 
                           {/* Quick Interactive Actions */}
                           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.03]">
-                            <p className="text-[9px] uppercase font-bold text-zinc-500 mr-2 tracking-wider">Estado:</p>
+                            <p className="text-[10px] uppercase font-bold text-zinc-500 mr-2 tracking-wider">Estado:</p>
                             <button
                               onClick={() => updateBlockStatus(block.id, "COMPLETED")}
-                              className={`flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
+                              className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
                                 block.executedStatus === "COMPLETED"
                                   ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
                                   : "bg-white/5 text-zinc-400 border-white/5 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20"
@@ -535,7 +519,7 @@ export default function DashboardPage() {
                             </button>
                             <button
                               onClick={() => updateBlockStatus(block.id, "SKIPPED")}
-                              className={`flex items-center gap-1 text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
+                              className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all border ${
                                 block.executedStatus === "SKIPPED"
                                   ? "bg-red-500/20 text-red-300 border-red-500/30"
                                   : "bg-white/5 text-zinc-400 border-white/5 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20"
@@ -546,7 +530,7 @@ export default function DashboardPage() {
                             {block.executedStatus !== "PLANNED" && (
                               <button
                                 onClick={() => updateBlockStatus(block.id, "PLANNED")}
-                                className="text-[9px] text-zinc-500 hover:text-zinc-300 font-semibold underline px-2"
+                                className="text-[10px] text-zinc-500 hover:text-zinc-300 font-semibold underline px-2"
                               >
                                 Restablecer
                               </button>
@@ -579,7 +563,7 @@ export default function DashboardPage() {
                   <Swords className="w-4 h-4 text-purple-400" />
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Checklist Misiones</h3>
                 </div>
-                <Link href="/misiones" className="text-[9px] text-zinc-500 hover:text-purple-400 font-bold bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg">
+                <Link href="/misiones" className="text-[10px] text-zinc-500 hover:text-purple-400 font-bold bg-white/5 border border-white/5 px-2.5 py-1 rounded-lg">
                   Misiones
                 </Link>
               </div>
@@ -626,7 +610,7 @@ export default function DashboardPage() {
                   <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                     <CheckCircle2 className="w-8 h-8 text-emerald-500/20 mb-2" />
                     <p className="text-[11px] font-bold text-zinc-400">Sin misiones activas</p>
-                    <p className="text-[9px] text-zinc-600 mt-1 max-w-[160px] mx-auto">Toma el control agendando una misión clave.</p>
+                    <p className="text-[10px] text-zinc-600 mt-1 max-w-[160px] mx-auto">Toma el control agendando una misión clave.</p>
                   </div>
                 )}
               </div>
@@ -639,7 +623,7 @@ export default function DashboardPage() {
                   <Edit2 className="w-3.5 h-3.5 text-zinc-400" />
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Brain Dump (Bloc Diario)</h3>
                 </div>
-                <span className="text-[8px] bg-zinc-800 text-zinc-500 border border-white/5 px-2 py-0.5 rounded uppercase font-bold tracking-widest">Local</span>
+                <span className="text-[10px] bg-zinc-800 text-zinc-500 border border-white/5 px-2 py-0.5 rounded uppercase font-bold tracking-widest">Local</span>
               </div>
               <textarea
                 value={scratchpad}
@@ -697,18 +681,18 @@ export default function DashboardPage() {
                   <span className="text-3xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
                     {avgGoalProgress}%
                   </span>
-                  <span className="text-[9px] uppercase font-bold text-zinc-500 tracking-widest mt-0.5">Meta General</span>
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mt-0.5">Meta General</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 w-full mt-8 pt-6 border-t border-white/5">
                 <div className="text-left">
                   <p className="text-lg font-bold font-mono text-zinc-200">{activeGoals.length}</p>
-                  <p className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider mt-0.5">Metas Activas</p>
+                  <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mt-0.5">Metas Activas</p>
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold font-mono text-emerald-400">{completedGoals.length}</p>
-                  <p className="text-[9px] uppercase font-bold text-zinc-500 tracking-wider mt-0.5">Completadas</p>
+                  <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mt-0.5">Completadas</p>
                 </div>
               </div>
             </div>
@@ -725,7 +709,7 @@ export default function DashboardPage() {
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Alertas de Ejecución</h3>
                 </div>
                 {alerts.length > 0 && (
-                  <span className="text-[9px] font-bold bg-zinc-800 text-zinc-300 border border-white/5 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-white/5 px-2.5 py-0.5 rounded-full">
                     {alerts.length} Totales
                   </span>
                 )}
@@ -753,7 +737,7 @@ export default function DashboardPage() {
                   <Target className="w-4.5 h-4.5 text-amber-400" />
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">Progreso Reciente</h3>
                 </div>
-                <Link href="/estrategia/metas" className="text-[9px] font-bold text-zinc-400 hover:text-amber-400 transition-colors flex items-center gap-1">
+                <Link href="/estrategia/metas" className="text-[10px] font-bold text-zinc-400 hover:text-amber-400 transition-colors flex items-center gap-1">
                   Ver Todas <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
@@ -764,7 +748,7 @@ export default function DashboardPage() {
                     <div key={goal.id} className="p-3 hover:bg-white/[0.01] rounded-xl border border-transparent hover:border-white/5 transition-all">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-zinc-200 truncate pr-4">{goal.name}</span>
-                        <span className={`badge text-[9px] py-0 px-2 leading-none shrink-0 ${getStatusColor(goal.status)}`}>
+                        <span className={`badge text-[10px] py-0 px-2 leading-none shrink-0 ${getStatusColor(goal.status)}`}>
                           {goal.status.replace("_", " ")}
                         </span>
                       </div>
@@ -815,13 +799,13 @@ export default function DashboardPage() {
                 <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${netBalance >= 0 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
                   <Wallet className="w-4 h-4" />
                 </div>
-                <span className="text-[9px] uppercase font-bold text-zinc-500 font-mono">Mes en Curso</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono">Mes en Curso</span>
               </div>
               <p className={`text-2xl font-black font-mono tracking-tight ${netBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {formatCurrency(netBalance)}
               </p>
               <p className="text-[10px] text-zinc-500 mt-1 font-semibold uppercase tracking-wider">Balance Neto</p>
-              <p className="text-[9px] text-zinc-600 mt-0.5 font-medium">Ingresos menos gastos actuales</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">Ingresos menos gastos actuales</p>
             </div>
 
             {/* Tasa de Ahorro */}
@@ -830,13 +814,13 @@ export default function DashboardPage() {
                 <div className="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 bg-amber-500/10 text-amber-400 border-amber-500/20">
                   <TrendingUp className="w-4 h-4" />
                 </div>
-                <span className="text-[9px] uppercase font-bold text-zinc-500 font-mono">Salud Financiera</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono">Salud Financiera</span>
               </div>
               <p className="text-2xl font-black font-mono tracking-tight text-amber-400">
                 {savingsRate}%
               </p>
               <p className="text-[10px] text-zinc-500 mt-1 font-semibold uppercase tracking-wider">Tasa de Ahorro</p>
-              <p className="text-[9px] text-zinc-600 mt-0.5 font-medium">Saludable: mínimo 20%</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">Saludable: mínimo 20%</p>
             </div>
 
             {/* Total Ahorrado */}
@@ -845,13 +829,13 @@ export default function DashboardPage() {
                 <div className="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 bg-blue-500/10 text-blue-400 border-blue-500/20">
                   <PiggyBank className="w-4 h-4" />
                 </div>
-                <span className="text-[9px] uppercase font-bold text-zinc-500 font-mono">Acumulado</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono">Acumulado</span>
               </div>
               <p className="text-2xl font-black font-mono tracking-tight text-blue-400">
                 {formatCurrency(savingsTotal)}
               </p>
               <p className="text-[10px] text-zinc-500 mt-1 font-semibold uppercase tracking-wider">Patrimonio Ahorrado</p>
-              <p className="text-[9px] text-zinc-600 mt-0.5 font-medium">Ahorros y fondos acumulados</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5 font-medium">Ahorros y fondos acumulados</p>
             </div>
 
           </div>
@@ -952,7 +936,7 @@ export default function DashboardPage() {
                     <div key={debt.id} className="p-4 rounded-2xl bg-zinc-950/40 border border-white/[0.03] flex items-center justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold text-zinc-200">{debt.entity}</p>
-                        <p className="text-[9px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Corte: Día {debt.cutoffDate} · Pago Mín: {formatCurrency(debt.minimumPayment)}</p>
+                        <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Corte: Día {debt.cutoffDate} · Pago Mín: {formatCurrency(debt.minimumPayment)}</p>
                       </div>
                       <span className="text-sm font-black font-mono text-orange-400">{formatCurrency(debt.currentBalance)}</span>
                     </div>
