@@ -23,6 +23,7 @@ import { useUid } from "@/lib/hooks/useAuth";
 import { monthInMexicoCity } from "@/lib/time/month";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
+  computeMilestoneProgress,
   computeMonthProgress,
   computePlanMonths,
   evaluateFinancialCut,
@@ -323,6 +324,7 @@ export default function PlanificadorPage() {
     plan.year === currentYear ? Number(currentMonth.slice(5, 7)) - 1 : plan.year < currentYear ? 12 : -1;
   const progress = computeMonthProgress(plan, months, progressMonth);
   const progressSummary = summarizeProgress(progress);
+  const milestoneProgress = computeMilestoneProgress(plan, months, progressMonth);
   const thisMonth = progressMonth >= 0 && progressMonth < 12 ? months[progressMonth] : null;
   const closing = months[11].accumulated;
   const signedMoney = (value: number) => `${value >= 0 ? "+" : "−"}${formatCurrency(Math.abs(value))}`;
@@ -697,11 +699,27 @@ export default function PlanificadorPage() {
       <Disclosure
         icon={Flag}
         title="Hitos"
-        description={plan.milestones.length ? `${plan.milestones.length} metas de dinero en ${plan.year}` : "Metas de dinero con fecha"}
+        description={
+          plan.milestones.length
+            ? (
+                [
+                  ["REACHED", "alcanzada"],
+                  ["ON_TRACK", "en camino"],
+                  ["BEHIND", "no alcanza"],
+                  ["MISSED", "no se alcanzó"],
+                ] as const
+              )
+                .map(([status, label]) => [milestoneProgress.filter((item) => item.status === status).length, label] as const)
+                .filter(([count]) => count > 0)
+                .map(([count, label]) => `${count} ${label}`)
+                .join(" · ")
+            : "Metas de dinero con fecha"
+        }
       >
         <MilestonesPanel
           milestones={plan.milestones}
-          months={months}
+          progress={milestoneProgress}
+          excludedLabel={plan.earmarked?.label}
           onChange={(id, patch: Partial<PlanMilestone>) =>
             update((draft) => ({
               ...draft,

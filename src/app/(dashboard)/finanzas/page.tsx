@@ -17,7 +17,8 @@ import {
 import { db } from "@/lib/firebase/config";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { loadSavingsPlan, patchSavingsPlanTracking } from "@/lib/repositories/savings-plans";
-import { computePlanMonths, type PlanMonth } from "@/lib/planning/savings-plan";
+import { computeMilestoneProgress, computePlanMonths, type PlanMonth } from "@/lib/planning/savings-plan";
+import { describeMilestone } from "@/components/planificador/milestone-status";
 import {
   Income,
   Expense,
@@ -289,6 +290,7 @@ export default function FinanzasPage() {
   const [savingsEarmark, setSavingsEarmark] = useState<{ label: string; amount: number } | null>(null);
   const [plannedMonth, setPlannedMonth] = useState<PlanMonth | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [milestoneDetails, setMilestoneDetails] = useState<Record<string, ReturnType<typeof describeMilestone>>>({});
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modal, setModal] = useState<
@@ -353,7 +355,6 @@ export default function FinanzasPage() {
   // ── Milestone form ──
   const [mName, setMName] = useState("");
   const [mTarget, setMTarget] = useState("");
-  const [mCurrent, setMCurrent] = useState("");
 
   const currentMonth = monthInMexicoCity();
 
@@ -407,16 +408,26 @@ export default function FinanzasPage() {
         } as Saving;
       });
 
+      // El avance de cada meta se calcula solo con el ahorro real (igual que el Planificador).
+      const milestoneProgress = computeMilestoneProgress(data, plannedMonths, Number(monthInMexicoCity().slice(5, 7)) - 1);
+      setMilestoneDetails(
+        Object.fromEntries(
+          data.milestones.flatMap((ms) => {
+            const item = milestoneProgress.find((entry) => entry.id === ms.id);
+            return item ? [[ms.id, describeMilestone(item, ms.endMonth)]] : [];
+          }),
+        ),
+      );
       synMilestones = data.milestones.map((ms) => {
-        const prog = ms.amount > 0 ? Math.round(((ms.currentAmount || 0) / ms.amount) * 100) : 0;
+        const item = milestoneProgress.find((entry) => entry.id === ms.id);
         return {
           id: ms.id,
           userId: uid,
           name: ms.name,
           targetAmount: ms.amount,
-          currentAmount: ms.currentAmount || 0,
-          progress: prog,
-          status: ms.status || (prog >= 100 ? "REACHED" : "PENDING"),
+          currentAmount: Math.max(0, item?.current ?? 0),
+          progress: item?.percent ?? 0,
+          status: item?.status === "REACHED" ? "REACHED" : "PENDING",
           notes: JSON.stringify({ startMonth: ms.startMonth, endMonth: ms.endMonth }),
           targetDate: new Date() as any,
           createdAt: new Date() as any,
@@ -748,7 +759,6 @@ export default function FinanzasPage() {
     setEditingId(m.id);
     setMName(m.name);
     setMTarget(m.targetAmount.toString());
-    setMCurrent(m.currentAmount.toString());
     setModal("milestone");
   };
 
@@ -1037,14 +1047,12 @@ export default function FinanzasPage() {
   const saveMilestone = async () => {
     if (!uid || !mName.trim()) return;
     const target = Number(mTarget) || 0;
-    const current = Number(mCurrent) || 0;
-    const status: "PENDING" | "REACHED" = current >= target ? "REACHED" : "PENDING";
 
     await patchSavingsPlanTracking(uid, Number(monthInMexicoCity().slice(0, 4)), (plan) => {
        if (editingId) {
            return {
              milestones: plan.milestones.map((m) =>
-               m.id === editingId ? { ...m, name: mName, amount: target, currentAmount: current, status } : m,
+               m.id === editingId ? { ...m, name: mName, amount: target } : m,
              ),
            };
        }
@@ -1055,15 +1063,13 @@ export default function FinanzasPage() {
              id: crypto.randomUUID(),
              name: mName,
              amount: target,
-             currentAmount: current,
-             status,
              startMonth: 0,
              endMonth: 11,
            },
          ],
        };
     });
-    setMName(""); setMTarget(""); setMCurrent("");
+    setMName(""); setMTarget("");
     closeModal();
     loadData();
   };
@@ -1513,6 +1519,14 @@ export default function FinanzasPage() {
                               <span>{formatCurrency(m.currentAmount)}</span>
                               <span>Meta: {formatCurrency(m.targetAmount)}</span>
                             </div>
+                            {milestoneDetails[m.id] ? (
+                              <p className="text-[11px] leading-snug text-zinc-400">
+                                <span className={cn("mr-1.5 inline-block rounded-full border px-1.5 py-px text-[10px] font-semibold", milestoneDetails[m.id].chip)}>
+                                  {milestoneDetails[m.id].label}
+                                </span>
+                                {milestoneDetails[m.id].detail}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -1986,6 +2000,14 @@ export default function FinanzasPage() {
                         <span>{formatCurrency(m.currentAmount)}</span>
                         <span>Meta: {formatCurrency(m.targetAmount)}</span>
                       </div>
+                      {milestoneDetails[m.id] ? (
+                        <p className="text-[11px] leading-snug text-zinc-400">
+                          <span className={cn("mr-1.5 inline-block rounded-full border px-1.5 py-px text-[10px] font-semibold", milestoneDetails[m.id].chip)}>
+                            {milestoneDetails[m.id].label}
+                          </span>
+                          {milestoneDetails[m.id].detail}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -2769,28 +2791,18 @@ export default function FinanzasPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto Objetivo Final</label>
-                      <input 
-                        type="number" 
-                        value={mTarget} 
-                        onChange={(e) => setMTarget(e.target.value)} 
-                        placeholder="0" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto Asegurado Actual</label>
-                      <input 
-                        type="number" 
-                        value={mCurrent} 
-                        onChange={(e) => setMCurrent(e.target.value)} 
-                        placeholder="0" 
-                        className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-2">Monto Objetivo Final</label>
+                    <input 
+                      type="number" 
+                      value={mTarget} 
+                      onChange={(e) => setMTarget(e.target.value)} 
+                      placeholder="0" 
+                      className="w-full px-3 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 transition-colors"
+                    />
+                    <p className="mt-2 text-xs text-zinc-500">
+                      El avance se calcula solo con tu ahorro real. La fecha de la meta se ajusta en el Planificador.
+                    </p>
                   </div>
                 </div>
               )}

@@ -1,22 +1,26 @@
 "use client";
 
 import { Flag, Plus, Trash2 } from "lucide-react";
-import type { PlanMonth } from "@/lib/planning/savings-plan";
+import type { MilestoneProgress } from "@/lib/planning/savings-plan";
 import type { PlanMilestone } from "@/lib/types";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { MONTH_LABELS } from "@/components/planificador/constants";
+import { describeMilestone } from "@/components/planificador/milestone-status";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 
-/** Hitos de ahorro: viable si el dinero total proyectado alcanza la meta. */
+/** Hitos de ahorro: el avance se calcula solo con tu dinero real y la proyección del plan. */
 export function MilestonesPanel({
   milestones,
-  months,
+  progress,
+  excludedLabel,
   onChange,
   onAdd,
   onRemove,
 }: {
   milestones: PlanMilestone[];
-  months: PlanMonth[];
+  progress: MilestoneProgress[];
+  /** Apartado con destino que no cuenta para las metas (p. ej. el fondo del coche). */
+  excludedLabel?: string;
   onChange: (id: string, patch: Partial<PlanMilestone>) => void;
   onAdd: () => void;
   onRemove: (id: string) => void;
@@ -30,7 +34,9 @@ export function MilestonesPanel({
           </span>
           <div>
             <h2 className="text-sm font-bold text-zinc-100">Hitos</h2>
-            <p className="text-xs text-zinc-500">Metas de dinero total por fecha</p>
+            <p className="text-xs text-zinc-500">
+              El avance se calcula solo con tu ahorro real{excludedLabel ? `, sin contar ${excludedLabel}` : ""}
+            </p>
           </div>
         </div>
         <button
@@ -46,9 +52,8 @@ export function MilestonesPanel({
       ) : (
         <ul className="divide-y divide-white/[0.04]">
           {milestones.map((milestone) => {
-            const projected = months[milestone.endMonth]?.accumulated ?? 0;
-            const progress = milestone.amount > 0 ? Math.min(100, Math.max(0, (projected / milestone.amount) * 100)) : 0;
-            const viable = milestone.amount > 0 && projected >= milestone.amount;
+            const item = progress.find((entry) => entry.id === milestone.id);
+            const view = item ? describeMilestone(item, milestone.endMonth) : null;
             return (
               <li key={milestone.id} className="grid gap-3 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_150px_200px_auto] sm:items-center sm:px-5">
                 <div className="min-w-0">
@@ -58,20 +63,18 @@ export function MilestonesPanel({
                     aria-label="Nombre del hito"
                     className="w-full rounded-md bg-transparent px-1.5 py-1 text-sm font-semibold text-zinc-100 outline-none hover:bg-white/[0.04] focus:bg-white/[0.06]"
                   />
-                  <div className="mt-2 flex items-center gap-2 px-1.5">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                      <div
-                        className={cn("h-full rounded-full", viable ? "bg-emerald-400" : "bg-amber-400")}
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <span className={cn("text-xs font-semibold", viable ? "text-emerald-300" : "text-amber-300")}>
-                      {viable ? "Viable" : `${Math.round(progress)}%`}
-                    </span>
-                  </div>
-                  <p className="mt-1 px-1.5 text-xs text-zinc-500">
-                    Proyección a {MONTH_LABELS[milestone.endMonth]}: {formatCurrency(projected)}
-                  </p>
+                  {item && view ? (
+                    <>
+                      <div className="mt-2 flex items-center gap-2 px-1.5">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                          <div className={cn("h-full rounded-full", view.bar)} style={{ width: `${item.percent}%` }} />
+                        </div>
+                        <span className="num w-9 text-right font-mono text-xs text-zinc-400">{item.percent}%</span>
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-semibold", view.chip)}>{view.label}</span>
+                      </div>
+                      <p className="mt-1 px-1.5 text-xs text-zinc-500">{view.detail}</p>
+                    </>
+                  ) : null}
                 </div>
                 <label className="flex flex-col gap-1 text-xs text-zinc-500">
                   Meta
