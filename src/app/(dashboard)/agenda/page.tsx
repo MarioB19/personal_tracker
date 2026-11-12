@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { cn, normalizeActivityName } from "@/lib/utils";
 import madrizRoutine from "@/data/routines/madriz-v2.json";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 
 const DAYS: { key: DayOfWeek; label: string; short: string }[] = [
   { key: "MON", label: "Lunes", short: "Lun" },
@@ -1047,9 +1048,9 @@ export default function AgendaPage() {
               </button>
             )}
             
-            <button onClick={() => view === "week" ? setCurrentWeekOffset(o => o - 1) : setCurrentMonthOffset(o => o - 1)} className="btn-secondary h-10 p-2.5 rounded-xl"><ChevronLeft className="w-4 h-4" /></button>
+            <button type="button" aria-label={view === "week" ? "Semana anterior" : "Mes anterior"} onClick={() => view === "week" ? setCurrentWeekOffset(o => o - 1) : setCurrentMonthOffset(o => o - 1)} className="btn-secondary h-10 p-2.5 rounded-xl"><ChevronLeft className="w-4 h-4" /></button>
             <button onClick={() => view === "week" ? setCurrentWeekOffset(0) : setCurrentMonthOffset(0)} className="btn-secondary h-10 px-4 rounded-xl text-xs font-bold">Hoy</button>
-            <button onClick={() => view === "week" ? setCurrentWeekOffset(o => o + 1) : setCurrentMonthOffset(o => o + 1)} className="btn-secondary h-10 p-2.5 rounded-xl"><ChevronRight className="w-4 h-4" /></button>
+            <button type="button" aria-label={view === "week" ? "Semana siguiente" : "Mes siguiente"} onClick={() => view === "week" ? setCurrentWeekOffset(o => o + 1) : setCurrentMonthOffset(o => o + 1)} className="btn-secondary h-10 p-2.5 rounded-xl"><ChevronRight className="w-4 h-4" /></button>
           </div>
         </div>
       </div>
@@ -1185,7 +1186,7 @@ export default function AgendaPage() {
               )}
             </div>
 
-            <div className="flex-1 space-y-2 max-h-[175px] overflow-y-auto scrollbar-thin my-1 pr-1">
+            <div tabIndex={0} role="region" aria-label="Top actividades" className="flex-1 space-y-2 max-h-[175px] overflow-y-auto scrollbar-thin my-1 pr-1 rounded-lg">
               {sortedActivities.slice(0, 5).map((act, index) => {
                 const matchedBlock = activeBlocks.find(b => normalizeActivityTitle(b.title || "") === act.title);
                 const category = matchedBlock ? matchedBlock.category : "PERSONAL";
@@ -1313,7 +1314,7 @@ export default function AgendaPage() {
                         <span className={cn("text-[10px] font-black uppercase tracking-widest", isCurrentDay ? "text-amber-400" : "text-zinc-500")}>
                           {day.label}
                         </span>
-                        <button 
+                        <button type="button" aria-label={`Agregar bloque el ${day.label}`} 
                           onClick={() => { setSelectedDay(day.key); setShowForm(true); }}
                           className="mt-1 text-zinc-500 hover:text-amber-400 transition-colors p-0.5 hover:bg-white/5 rounded"
                         >
@@ -1550,7 +1551,7 @@ export default function AgendaPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                           {day.label}
                         </span>
-                        <button 
+                        <button type="button" aria-label={`Agregar bloque el ${day.label}`} 
                           onClick={() => { setSelectedDay(day.key); setShowForm(true); }}
                           className="mt-1 text-zinc-500 hover:text-amber-400 transition-colors p-0.5 hover:bg-white/5 rounded"
                         >
@@ -1691,6 +1692,7 @@ export default function AgendaPage() {
               isVisible ? "translate-x-0" : "translate-x-full"
             )}
           >
+            <DialogA11y label="Nuevo bloque horario" onClose={() => setShowForm(false)} />
             {/* Slide-Over Header */}
             <div className="flex items-center justify-between p-6 border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-xl shrink-0">
               <div className="flex items-center gap-3">
@@ -1704,7 +1706,7 @@ export default function AgendaPage() {
                   </p>
                 </div>
               </div>
-              <button 
+              <button type="button" aria-label="Cerrar formulario" 
                 onClick={() => setShowForm(false)} 
                 className="w-8 h-8 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
               >
@@ -1818,6 +1820,7 @@ export default function AgendaPage() {
               className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
               onClick={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }}
             />
+              <DialogA11y label="Detalle del bloque" onClose={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }} />
             
             <div className="relative w-full max-w-md bg-[#0c0c0e] border border-white/10 rounded-3xl p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200 flex flex-col space-y-5">
               
@@ -1847,7 +1850,7 @@ export default function AgendaPage() {
                     </p>
                   </div>
                 </div>
-                <button 
+                <button type="button" aria-label="Cerrar detalle del bloque" 
                   onClick={() => { setIsModalOpen(false); setSelectedBlockForModal(null); }}
                   className="w-7 h-7 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white transition-colors shrink-0"
                 >
@@ -2001,6 +2004,7 @@ export default function AgendaPage() {
             className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
             onClick={() => { setIsStatsModalOpen(false); setStatsSearchQuery(""); }}
           />
+            <DialogA11y label="Estadísticas de la semana" onClose={() => { setIsStatsModalOpen(false); setStatsSearchQuery(""); }} />
           
           {/* Modal Box */}
           <div className="relative w-full max-w-lg bg-[#0c0c0e] border border-white/10 rounded-3xl p-6 shadow-2xl z-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh] space-y-4">
@@ -2015,7 +2019,7 @@ export default function AgendaPage() {
                   Tiempo total dedicado a cada bloque semanal
                 </p>
               </div>
-              <button 
+              <button type="button" aria-label="Cerrar estadísticas" 
                 onClick={() => { setIsStatsModalOpen(false); setStatsSearchQuery(""); }}
                 className="w-7 h-7 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
               >

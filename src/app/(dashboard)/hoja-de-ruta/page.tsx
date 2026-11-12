@@ -28,6 +28,7 @@ import {
   Move,
   ArrowRightLeft
 } from "lucide-react";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────
@@ -161,6 +162,7 @@ function ModalShell({
         className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c0e] shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
+        <DialogA11y label={title} onClose={onClose} />
         <div className="flex items-center justify-between gap-4 border-b border-white/5 px-6 py-4">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight">{title}</h3>
@@ -169,7 +171,7 @@ function ModalShell({
             )}
           </div>
 
-          <button
+          <button aria-label="Cerrar"
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
           >

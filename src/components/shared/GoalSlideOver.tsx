@@ -11,6 +11,7 @@ import {
 } from "@/lib/types";
 import { X, Save, Target, AlignLeft, CalendarDays, Trophy } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 import { cn } from "@/lib/utils";
 
 const GOAL_TYPES: GoalType[] = ["RESULTADO", "PROCESO", "HABITO", "PROYECTO", "MANTENIMIENTO"];
@@ -106,6 +107,7 @@ export function GoalSlideOver({
           isVisible ? "translate-x-0" : "translate-x-full"
         )}
       >
+        <DialogA11y label={initial ? "Editar meta" : "Nueva meta"} onClose={onClose} />
         {/* Cabecera de SlideOver */}
         <div className="flex items-center justify-between border-b border-white/5 px-6 py-5 bg-[#0c0c0e]/80 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3">
@@ -126,7 +128,7 @@ export function GoalSlideOver({
             </div>
           </div>
           
-          <button 
+          <button aria-label="Cerrar panel" 
             onClick={onClose} 
             className="w-8 h-8 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
           >

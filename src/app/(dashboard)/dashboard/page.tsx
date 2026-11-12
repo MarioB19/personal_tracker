@@ -131,7 +131,7 @@ function AlertCard({ alert }: { alert: Alert }) {
             <p className="text-[10px] text-zinc-500 truncate mt-0.5">{alert.description}</p>
           </div>
         </div>
-        <button className="text-zinc-500 hover:text-zinc-300">
+        <button type="button" aria-label={expanded ? "Ocultar detalle" : "Ver detalle"} aria-expanded={expanded} className="text-zinc-500 hover:text-zinc-300">
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
       </div>
@@ -568,7 +568,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              <div className="flex-1 overflow-y-auto max-h-[220px] pr-1 space-y-4 custom-scrollbar">
+              <div tabIndex={0} role="region" aria-label="Misiones activas" className="flex-1 overflow-y-auto max-h-[220px] pr-1 space-y-4 custom-scrollbar rounded-lg">
                 {activeMissions.length > 0 ? (
                   activeMissions.slice(0, 2).map((mission) => (
                     <div key={mission.id} className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-2xl">
