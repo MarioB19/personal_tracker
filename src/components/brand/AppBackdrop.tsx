@@ -13,8 +13,8 @@ export function AppBackdrop() {
           width={ambient.width}
           height={ambient.height}
           alt=""
+          unoptimized
           loading="eager"
-          sizes="100vw"
         />
       ) : null}
     </div>

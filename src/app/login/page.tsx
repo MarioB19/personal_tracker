@@ -58,9 +58,9 @@ function HeroSculpture() {
             width={hero.width}
             height={hero.height}
             alt=""
+            unoptimized
             loading="eager"
             fetchPriority="high"
-            sizes="(min-width: 1024px) 520px, 220px"
           />
         ) : (
           <div className="login-hero__core" />

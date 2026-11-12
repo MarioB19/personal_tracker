@@ -41,8 +41,8 @@ export function BrandMark({
         width={emblem.width}
         height={emblem.height}
         alt=""
+        unoptimized
         loading={priority ? "eager" : undefined}
-        sizes={`${Math.round(size * 1.2)}px`}
       />
     </span>
   );

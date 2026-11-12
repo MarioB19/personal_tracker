@@ -18,8 +18,8 @@ export function SectionArt() {
         width={art.width}
         height={art.height}
         alt=""
+        unoptimized
         loading="eager"
-        sizes="96px"
       />
     </span>
   );
