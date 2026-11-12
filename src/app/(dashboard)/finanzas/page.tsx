@@ -89,6 +89,7 @@ import {
   findActiveExpenseIdentityConflict,
   selectExpenseSeriesForIdentity,
 } from "@/lib/finance/expense-series";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 import InfoproductHealthCheck from "@/components/finanzas/InfoproductHealthCheck";
 
 type TabType = "health-check" | "resumen" | "ingresos" | "gastos" | "deudas" | "ahorros" | "productos";
@@ -1223,13 +1224,25 @@ export default function FinanzasPage() {
 
   const tabNavigation = (
     <div role="tablist" aria-label="Secciones de finanzas" className="grid grid-cols-3 gap-1.5 rounded-2xl border border-white/5 bg-zinc-950/40 p-1.5 select-none sm:flex sm:overflow-x-auto">
-      {tabs.map((tab) => (
+      {tabs.map((tab, tabIndex) => (
         <button
           key={tab.key}
           type="button"
           role="tab"
           aria-selected={activeTab === tab.key}
+          tabIndex={activeTab === tab.key ? 0 : -1}
           onClick={() => setActiveTab(tab.key)}
+          onKeyDown={(event) => {
+            const keys: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+            let next: number | null = null;
+            if (event.key in keys) next = (tabIndex + keys[event.key] + tabs.length) % tabs.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = tabs.length - 1;
+            if (next === null) return;
+            event.preventDefault();
+            setActiveTab(tabs[next].key);
+            (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+          }}
           className={cn(
             "flex items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold whitespace-nowrap transition-all duration-200 sm:justify-start sm:gap-2.5 sm:px-4",
             activeTab === tab.key
@@ -1237,7 +1250,7 @@ export default function FinanzasPage() {
               : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
           )}
         >
-          <tab.icon className="w-3.5 h-3.5 shrink-0" />
+          <tab.icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           {tab.label}
         </button>
       ))}
@@ -1404,7 +1417,7 @@ export default function FinanzasPage() {
                       <PiggyBank className="w-24 h-24 text-amber-400" />
                     </div>
                     <div>
-                      <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Tasa de Ahorro Real</h4>
+                      <h2 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Tasa de Ahorro Real</h2>
                       <p className="text-2xl font-black text-white font-mono">{savingsRate}%</p>
                       <p className="text-[11px] text-zinc-400 mt-2">
                         Tu tasa actual es del <span className={cn("font-bold", savingsRate >= 20 ? "text-emerald-400" : "text-amber-400")}>{savingsRate}%</span>. 
@@ -1435,7 +1448,7 @@ export default function FinanzasPage() {
                       <Zap className="w-24 h-24 text-blue-400" />
                     </div>
                     <div>
-                      <h4 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Valor Neto de Tu Hora</h4>
+                      <h2 className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1.5">Valor Neto de Tu Hora</h2>
                       <p className="text-2xl font-black text-white font-mono">{formatCurrency(avgCostPerHour)}<span className="text-xs text-zinc-500 font-normal"> / hr</span></p>
                       <p className="text-[11px] text-zinc-400 mt-2">
                         Cada hora de tu vida laboral neta equivale a <span className="font-bold text-blue-400">{formatCurrency(avgCostPerHour)}</span>. 
@@ -1494,13 +1507,13 @@ export default function FinanzasPage() {
                               )}>
                                 {m.status === "REACHED" ? "✓ Alcanzado" : `${m.progress}%`}
                               </span>
-                              <button
+                              <button type="button" aria-label={`Editar hito ${m.name}`}
                                 onClick={() => openEditMilestone(m)}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 active:scale-95"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              <button
+                              <button type="button" aria-label={`Eliminar hito ${m.name}`}
                                 onClick={() => deleteItem("milestones", m.id)}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 active:scale-95"
                               >
@@ -1975,13 +1988,13 @@ export default function FinanzasPage() {
                         )}>
                           {m.status === "REACHED" ? "✓ Alcanzado" : `${m.progress}%`}
                         </span>
-                        <button
+                        <button type="button" aria-label={`Editar hito ${m.name}`}
                           onClick={() => openEditMilestone(m)}
                           className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/20 active:scale-95"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button
+                        <button type="button" aria-label={`Eliminar hito ${m.name}`}
                           onClick={() => deleteItem("milestones", m.id)}
                           className="opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 active:scale-95"
                         >
@@ -2189,6 +2202,7 @@ export default function FinanzasPage() {
               isVisible ? "translate-x-0" : "translate-x-full"
             )}
           >
+            <DialogA11y label="Formulario de finanzas" onClose={closeModal} />
             {/* Header consistent with Misiones / GoalSlideOver */}
             <div className="flex items-center justify-between p-6 border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-xl shrink-0">
               <div className="flex items-center gap-3">
@@ -2207,7 +2221,7 @@ export default function FinanzasPage() {
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Métricas y Parámetros</p>
                 </div>
               </div>
-              <button 
+              <button type="button" aria-label="Cerrar formulario" 
                 onClick={closeModal} 
                 className="w-8 h-8 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
               >

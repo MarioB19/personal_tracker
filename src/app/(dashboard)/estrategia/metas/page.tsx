@@ -249,7 +249,7 @@ function GoalCard({
             </button>
           )}
 
-          <button
+          <button aria-label="Más opciones de la meta"
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen(menuOpen === goal.id ? null : goal.id);
@@ -542,7 +542,7 @@ export default function MetasPage() {
               className="w-full bg-black/40 border border-white/5 rounded-xl pl-10 pr-9 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all font-semibold"
             />
             {searchTerm && (
-              <button
+              <button type="button" aria-label="Cerrar formulario"
                 onClick={() => setSearchTerm("")}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 active:scale-90 transition-transform"
               >

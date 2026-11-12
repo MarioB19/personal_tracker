@@ -51,6 +51,7 @@ import {
   Settings,
   Grid,
 } from "lucide-react";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 
 type VibeCacheEntry = {
   summary: VibeBusinessSummary | null;
@@ -1776,7 +1777,7 @@ export default function InfoproductHealthCheck({
                       <span className="text-sm font-black text-blue-400">-{formatCurrency(nonNegativeAmount(fix.amount))}</span>
 
                       <div className="flex items-center gap-1.5">
-                        <button
+                        <button aria-label={`Editar gasto fijo ${fix.concept}`}
                           onClick={() => handleOpenFixedModal(fix)}
                           disabled={fixedMutationPending}
                           className="p-2 rounded-xl border border-white/5 bg-white/5 text-zinc-400 hover:text-amber-400 transition-all"
@@ -2089,6 +2090,7 @@ export default function InfoproductHealthCheck({
       {/* ── MODAL: OPERACIÓN PRODUCTO ── */}
       {opModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <DialogA11y label="Registro de producto" onClose={() => setOpModalOpen(false)} />
           <div className="w-full max-w-md bg-[#0c0c0e] border border-white/10 rounded-3xl overflow-hidden shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-white">
@@ -2180,6 +2182,7 @@ export default function InfoproductHealthCheck({
       {/* ── MODAL: GASTO FIJO ── */}
       {fixedModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <DialogA11y label="Gasto fijo" onClose={() => setFixedModalOpen(false)} />
           <div className="w-full max-w-md bg-[#0c0c0e] border border-white/10 rounded-3xl overflow-hidden shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-white">
@@ -2250,6 +2253,7 @@ export default function InfoproductHealthCheck({
       {/* ── MODAL: CONFIGURAR CAJA DISPONIBLE ── */}
       {configModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <DialogA11y label="Configurar caja disponible" onClose={() => setConfigModalOpen(false)} />
           <div className="w-full max-w-md bg-[#0c0c0e] border border-white/10 rounded-3xl overflow-hidden shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <h3 className="text-sm font-black uppercase tracking-wider text-white">

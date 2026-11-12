@@ -595,7 +595,7 @@ export default function AnaliticaPage() {
 
           {!isHistorical && (
             <div className="flex items-center gap-1 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-1.5">
-              <button
+              <button type="button" aria-label="Mes anterior"
                 onClick={handlePrevMonth}
                 className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
               >
@@ -604,7 +604,7 @@ export default function AnaliticaPage() {
               <span className="text-xs font-bold text-zinc-200 px-3 select-none font-mono tracking-tight min-w-[90px] text-center">
                 {MONTH_SHORT[selectedMonth - 1]}. {selectedYear}
               </span>
-              <button
+              <button type="button" aria-label="Mes siguiente"
                 onClick={handleNextMonth}
                 className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-white/5 active:scale-95 transition-all cursor-pointer"
               >

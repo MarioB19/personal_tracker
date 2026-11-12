@@ -1,5 +1,9 @@
+"use client";
+
 import type { ElementType, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { SectionArt, hasSectionArt } from "@/components/brand/SectionArt";
 
 const TONES = {
   amber: "border-amber-500/25 bg-amber-500/10 text-amber-300",
@@ -12,7 +16,10 @@ const TONES = {
 
 export type PageTone = keyof typeof TONES;
 
-/** Ícono + título + subtítulo de una página. */
+/**
+ * Ícono + título + subtítulo de una página. Si la sección tiene un render 3D
+ * de marca, lo muestra en lugar del ícono plano.
+ */
 export function PageTitle({
   icon: Icon,
   title,
@@ -26,19 +33,27 @@ export function PageTitle({
   eyebrow?: ReactNode;
   tone?: PageTone;
 }) {
+  const pathname = usePathname();
+  const withArt = hasSectionArt(pathname);
+
   return (
-    <div className="flex min-w-0 items-start gap-3.5">
-      <div
-        className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
-          TONES[tone],
-        )}
-      >
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </div>
+    <div className="flex min-w-0 items-center gap-4">
+      {withArt ? (
+        <SectionArt />
+      ) : (
+        <div
+          aria-hidden="true"
+          className={cn(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+            TONES[tone],
+          )}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      )}
       <div className="min-w-0">
         {eyebrow ? <p className="eyebrow mb-1">{eyebrow}</p> : null}
-        <h1 className="text-[22px] font-extrabold leading-tight tracking-tight text-white sm:text-2xl">
+        <h1 className="text-[22px] font-bold leading-tight tracking-tight text-white sm:text-[26px]">
           {title}
         </h1>
         {subtitle ? (

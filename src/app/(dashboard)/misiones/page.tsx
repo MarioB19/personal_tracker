@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn, formatPercent } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
+import { DialogA11y } from "@/components/ui/DialogA11y";
 
 const STATUSES: MissionStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED"];
 const DIFFICULTIES = [1, 2, 3, 4, 5] as const;
@@ -367,7 +368,7 @@ export default function MisionesPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Aventurero</p>
-              <h4 className="text-base font-black text-zinc-100">Brandon</h4>
+              <h2 className="text-base font-black text-zinc-100">Brandon</h2>
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
@@ -400,9 +401,9 @@ export default function MisionesPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Misiones Completadas</p>
-              <h4 className="text-base font-black text-emerald-400">
+              <h2 className="text-base font-black text-emerald-400">
                 {Math.round((completedMissions.length / Math.max(missions.length, 1)) * 100)}% de Éxito
-              </h4>
+              </h2>
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
@@ -437,7 +438,7 @@ export default function MisionesPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Campañas Activas</p>
-              <h4 className="text-base font-black text-orange-400">Bajo Ejecución</h4>
+              <h2 className="text-base font-black text-orange-400">Bajo Ejecución</h2>
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
@@ -478,6 +479,7 @@ export default function MisionesPage() {
             "relative w-full max-w-lg h-full bg-[#0c0c0e] border-l border-white/10 shadow-2xl transition-transform duration-300 ease-out flex flex-col z-10",
             isVisible ? "translate-x-0" : "translate-x-full"
           )}>
+            <DialogA11y label={editing ? "Modificar misión" : "Nueva misión"} onClose={() => { setShowForm(false); setEditing(null); resetForm(); }} />
             <div className="flex items-center justify-between p-6 border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-xl shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/10 flex items-center justify-center">
@@ -488,7 +490,7 @@ export default function MisionesPage() {
                   <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Parámetros RPG de Reto</p>
                 </div>
               </div>
-              <button 
+              <button type="button" aria-label="Cerrar formulario" 
                 onClick={() => { setShowForm(false); setEditing(null); resetForm(); }} 
                 className="w-8 h-8 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
               >
@@ -635,14 +637,14 @@ export default function MisionesPage() {
                 <div className="space-y-1.5 mb-4">
                   {checklist.map((item) => (
                     <div key={item.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-zinc-900/30 border border-zinc-800/40 hover:border-zinc-800/80 transition-colors">
-                      <button 
+                      <button aria-label={item.completed ? `Marcar como pendiente: ${item.text}` : `Marcar como hecha: ${item.text}`} aria-pressed={item.completed} 
                         type="button"
                         onClick={() => setChecklist(checklist.map(c => c.id === item.id ? { ...c, completed: !c.completed } : c))}
                       >
                         {item.completed ? <CheckSquare className="w-4 h-4 text-emerald-400" /> : <Square className="w-4 h-4 text-zinc-600 hover:text-emerald-400/50 transition-colors" />}
                       </button>
                       <span className={cn("text-xs flex-1 text-zinc-300", item.completed && "line-through text-zinc-600")}>{item.text}</span>
-                      <button 
+                      <button aria-label={`Quitar paso: ${item.text}`} 
                         type="button"
                         onClick={() => setChecklist(checklist.filter(c => c.id !== item.id))} 
                         className="text-zinc-600 hover:text-red-400 p-0.5"
@@ -665,7 +667,7 @@ export default function MisionesPage() {
                     placeholder="Agregar paso y presionar Enter..." 
                     className="flex-1 px-3 py-2 bg-white/[0.02] border border-white/5 rounded-lg text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/50 transition-colors" 
                   />
-                  <button 
+                  <button aria-label="Agregar paso" 
                     type="button"
                     onClick={addCheckItem} 
                     className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 px-3.5 rounded-lg transition-colors flex items-center justify-center"
@@ -881,7 +883,7 @@ export default function MisionesPage() {
                                   )}
                                   
                                   <div className="relative">
-                                    <button 
+                                    <button type="button" aria-label={`Más opciones de ${m.name}`} aria-haspopup="menu" aria-expanded={menuOpen === m.id} 
                                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === m.id ? null : m.id); }} 
                                       className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.02] border border-white/5 text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-all"
                                     >
@@ -956,7 +958,7 @@ export default function MisionesPage() {
                                         placeholder="Nuevo paso..." 
                                         className="flex-1 bg-white/[0.01] border border-white/5 px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 placeholder:text-zinc-700"
                                       />
-                                      <button 
+                                      <button type="button" aria-label="Agregar paso" 
                                         onClick={() => handleAddInlineCheckItem(m.id)}
                                         className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg px-2.5 flex items-center justify-center transition-all duration-200"
                                       >

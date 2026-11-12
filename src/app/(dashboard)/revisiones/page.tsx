@@ -649,7 +649,7 @@ export default function RevisionesPage() {
               </p>
               <div className="flex gap-2 justify-center lg:justify-start">
                 {([1, 2, 3, 4, 5] as const).map((s) => (
-                  <button
+                  <button aria-label={`${s} de 5 estrellas`} aria-pressed={s === rating}
                     key={s}
                     onClick={() => setRating(s)}
                     className="transition-all hover:scale-115 active:scale-95 cursor-pointer"
@@ -861,7 +861,7 @@ export default function RevisionesPage() {
                           </p>
                           <div className="flex gap-1.5">
                             {[1, 2, 3, 4, 5].map((val) => (
-                              <button
+                              <button aria-label={`${val} de 5 estrellas`} aria-pressed={val === state.rating}
                                 key={val}
                                 onClick={() => updateDimensionRating(dim.key, val)}
                                 className="transition-all hover:scale-120 active:scale-90 cursor-pointer"
@@ -1211,7 +1211,7 @@ export default function RevisionesPage() {
                       >
                         {TYPE_LABELS[r.type] || r.type}
                       </span>
-                      <h3 className="text-sm font-bold text-zinc-100 tracking-wide">{r.period}</h3>
+                      <h2 className="text-sm font-bold text-zinc-100 tracking-wide">{r.period}</h2>
                       <div className="flex items-center gap-2">
                         <div className="flex bg-[#0f0f0f] border border-zinc-800/60 p-1.5 rounded-lg gap-0.5 shadow-inner">
                           {[1, 2, 3, 4, 5].map((s) => (
@@ -1293,9 +1293,9 @@ export default function RevisionesPage() {
                       <div className="space-y-4">
                         {r.achievements?.length > 0 && (
                           <div className="bg-emerald-950/[0.06] border border-emerald-950/20 rounded-xl p-4.5">
-                            <h4 className="text-xs uppercase font-bold tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5">
+                            <h3 className="text-xs uppercase font-bold tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5">
                               <Trophy className="w-4 h-4" /> ✅ Logros del ciclo
-                            </h4>
+                            </h3>
                             <ul className="space-y-2 text-xs text-zinc-300">
                               {r.achievements.map((a, i) => (
                                 <li key={i} className="flex items-start gap-2 leading-relaxed">
@@ -1309,9 +1309,9 @@ export default function RevisionesPage() {
 
                         {r.learnings?.length > 0 && (
                           <div className="bg-sky-950/[0.06] border border-sky-950/20 rounded-xl p-4.5">
-                            <h4 className="text-xs uppercase font-bold tracking-wider text-sky-400 flex items-center gap-2 mb-2.5">
+                            <h3 className="text-xs uppercase font-bold tracking-wider text-sky-400 flex items-center gap-2 mb-2.5">
                               <Brain className="w-4 h-4" /> 💡 Aprendizajes
-                            </h4>
+                            </h3>
                             <ul className="space-y-2 text-xs text-zinc-300">
                               {r.learnings.map((l, i) => (
                                 <li key={i} className="flex items-start gap-2 leading-relaxed">
@@ -1329,9 +1329,9 @@ export default function RevisionesPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {r.blockers?.length > 0 && (
                             <div className="bg-orange-950/[0.06] border border-orange-950/20 rounded-xl p-4.5">
-                              <h4 className="text-xs uppercase font-bold tracking-wider text-orange-400 flex items-center gap-2 mb-2">
+                              <h3 className="text-xs uppercase font-bold tracking-wider text-orange-400 flex items-center gap-2 mb-2">
                                 <ShieldAlert className="w-3.5 h-3.5" /> 🚧 Bloqueadores
-                              </h4>
+                              </h3>
                               <ul className="space-y-1.5 text-xs text-zinc-300">
                                 {r.blockers.map((b, i) => (
                                   <li key={i} className="flex items-start gap-1.5 leading-relaxed">
@@ -1345,9 +1345,9 @@ export default function RevisionesPage() {
 
                           {r.adjustments?.length > 0 && (
                             <div className="bg-purple-950/[0.06] border border-purple-950/20 rounded-xl p-4.5">
-                              <h4 className="text-xs uppercase font-bold tracking-wider text-purple-400 flex items-center gap-2 mb-2">
+                              <h3 className="text-xs uppercase font-bold tracking-wider text-purple-400 flex items-center gap-2 mb-2">
                                 <Wrench className="w-3.5 h-3.5" /> 🔧 Ajustes
-                              </h4>
+                              </h3>
                               <ul className="space-y-1.5 text-xs text-zinc-300">
                                 {r.adjustments.map((a, i) => (
                                   <li key={i} className="flex items-start gap-1.5 leading-relaxed">
@@ -1362,9 +1362,9 @@ export default function RevisionesPage() {
 
                         {r.pendingItems?.length > 0 && (
                           <div className="bg-zinc-950/[0.2] border border-zinc-800/80 rounded-xl p-4.5">
-                            <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 mb-2">
+                            <h3 className="text-xs uppercase font-bold tracking-wider text-zinc-400 mb-2">
                               ⏳ Pendientes del ciclo
-                            </h4>
+                            </h3>
                             <ul className="space-y-1.5 text-xs text-zinc-300">
                               {r.pendingItems.map((p, i) => (
                                 <li key={i} className="flex items-start gap-2 leading-relaxed">
@@ -1378,9 +1378,9 @@ export default function RevisionesPage() {
 
                         {r.nextFocus && (
                           <div className="bg-amber-500/[0.02] border border-amber-500/15 rounded-xl p-4.5">
-                            <h4 className="text-xs uppercase font-bold tracking-wider text-amber-400 flex items-center gap-2 mb-1.5">
+                            <h3 className="text-xs uppercase font-bold tracking-wider text-amber-400 flex items-center gap-2 mb-1.5">
                               <Target className="w-4 h-4" /> Objetivo de Enfoque Próximo
-                            </h4>
+                            </h3>
                             <p className="text-xs font-semibold text-amber-100/90 pl-6 leading-relaxed">
                               {r.nextFocus}
                             </p>
@@ -1393,10 +1393,10 @@ export default function RevisionesPage() {
                     {r.selfEvaluations && (
                       <div className="space-y-4 pt-2">
                         <div className="border-b border-zinc-800/60 pb-2">
-                          <h4 className="text-xs uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-2">
+                          <h3 className="text-xs uppercase font-bold tracking-wider text-zinc-400 flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-amber-400" />
                             Reflexión Detallada de las 7 Dimensiones
-                          </h4>
+                          </h3>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1459,9 +1459,9 @@ export default function RevisionesPage() {
       ) : (
           <div className="text-center py-20 bg-[#080808]/40 border border-zinc-800/60 rounded-2xl shadow-sm max-w-xl mx-auto mt-6">
             <ClipboardCheck className="w-14 h-14 text-zinc-700 mx-auto mb-4" />
-            <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-2">
+            <h2 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-2">
               Sin revisiones
-            </h3>
+            </h2>
             <p className="text-xs text-zinc-500 max-w-xs mx-auto mb-5 leading-relaxed">
               Comienza registrando tu primera evaluación de la semana o el mes para dar seguimiento a tu crecimiento.
             </p>
